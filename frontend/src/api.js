@@ -1,4 +1,6 @@
-const BASE_URL = 'http://localhost:8000';
+// The one backend base URL, read from the frontend .env (VITE_API_URL).
+// Every endpoint below is built from this. Change it in .env to deploy.
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 class ApiError extends Error {
   constructor(message, status) {
