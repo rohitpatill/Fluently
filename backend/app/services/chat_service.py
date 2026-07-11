@@ -10,6 +10,7 @@ from ..prompts import OPENER_INSTRUCTION, TITLE_SYSTEM
 from . import prompt_builder
 from .agent_tools import build_tools
 from .llm_service import get_chat_model, get_utility_model
+from .model_service import resolve_for_user
 
 MAX_TOOL_ITERATIONS = 6
 
@@ -71,9 +72,16 @@ def run_agent_turn(
     if extra_instruction:
         messages.append(HumanMessage(content=extra_instruction))
 
+    # Resolve THIS user's chosen model + key (Swift/Sage). Governs every call this turn.
+    resolved = resolve_for_user(conversation.user_id)
+
     tools = build_tools(current_conversation_id=conversation.id, user_id=conversation.user_id)
     tool_map = {t.name: t for t in tools}
-    llm = get_chat_model(provider, model_name).bind_tools(tools)
+    llm = get_chat_model(
+        provider or resolved.provider,
+        model_name or resolved.model,
+        api_key=resolved.api_key,
+    ).bind_tools(tools)
 
     executed_tool_calls: list[dict] = []
     response = llm.invoke(messages)
@@ -110,7 +118,7 @@ def run_agent_turn(
     conversation.messages.append(assistant_msg)
     repo.touch_conversation(conversation.id)
 
-    _maybe_set_title(conversation)
+    _maybe_set_title(conversation, resolved)
     return assistant_msg
 
 
@@ -128,13 +136,13 @@ def _flatten_content(blocks) -> str:
     return "".join(parts)
 
 
-def _maybe_set_title(conversation: Conversation) -> None:
+def _maybe_set_title(conversation: Conversation, resolved) -> None:
     """Auto-title after the first exchange."""
     if conversation.title != "New conversation" or len(conversation.messages) < 2:
         return
     try:
         transcript = "\n".join(f"{m.role}: {m.content[:300]}" for m in conversation.messages[:4])
-        llm = get_utility_model(temperature=0.3)
+        llm = get_utility_model(resolved.provider, resolved.model, api_key=resolved.api_key, temperature=0.3)
         raw = llm.invoke([SystemMessage(content=TITLE_SYSTEM), HumanMessage(content=transcript)]).content
         title = raw if isinstance(raw, str) else _flatten_content(raw)  # Gemini returns block lists
         if title.strip():

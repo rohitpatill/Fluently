@@ -201,6 +201,8 @@ class User:
         name: str = "",
         picture: str = "",
         adopted_default: bool = False,
+        encrypted_api_key: str = "",
+        model_tier: str = "",
         id: str | None = None,
         created_at: datetime | None = None,
     ):
@@ -211,6 +213,10 @@ class User:
         self.picture = picture
         # True once this user has adopted the legacy "default" data (one-time, first user only).
         self.adopted_default = adopted_default
+        # Bring-your-own-key: the user's Gemini key ENCRYPTED at rest (crypto_service), and the
+        # chosen tier ("swift"|"sage"). Empty until the user finishes "How smart should I be?".
+        self.encrypted_api_key = encrypted_api_key
+        self.model_tier = model_tier
         self.created_at = created_at or utcnow()
 
     def to_doc(self) -> dict:
@@ -220,6 +226,8 @@ class User:
             "name": self.name,
             "picture": self.picture,
             "adopted_default": self.adopted_default,
+            "encrypted_api_key": self.encrypted_api_key,
+            "model_tier": self.model_tier,
             "created_at": self.created_at,
         }
 
@@ -232,6 +240,8 @@ class User:
             name=doc.get("name", ""),
             picture=doc.get("picture", ""),
             adopted_default=doc.get("adopted_default", False),
+            encrypted_api_key=doc.get("encrypted_api_key", ""),
+            model_tier=doc.get("model_tier", ""),
             created_at=doc.get("created_at"),
         )
 

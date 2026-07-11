@@ -360,6 +360,28 @@ def upsert_user_from_google(sub: str, email: str, name: str = "", picture: str =
     return user, True
 
 
+def set_user_key(user_id: str, encrypted_api_key: str, model_tier: str) -> None:
+    """Store the user's ENCRYPTED api key + chosen tier (the 'How smart should I be?' step
+    and the Settings 'replace key' flow both land here). Never store plaintext."""
+    users_col().update_one(
+        {"_id": _oid(user_id)},
+        {"$set": {"encrypted_api_key": encrypted_api_key, "model_tier": model_tier}},
+    )
+
+
+def set_user_tier(user_id: str, model_tier: str) -> None:
+    """Switch the user's tier only (same key). Used by the Settings Swift↔Sage toggle."""
+    users_col().update_one({"_id": _oid(user_id)}, {"$set": {"model_tier": model_tier}})
+
+
+def clear_user_model(user_id: str) -> None:
+    """Wipe the user's stored key + tier, so they must reconfigure via the 'How smart should
+    I be?' step. Part of the FULL reset (purge-all without keeping words)."""
+    users_col().update_one(
+        {"_id": _oid(user_id)}, {"$set": {"encrypted_api_key": "", "model_tier": ""}}
+    )
+
+
 def reassign_default_data(new_user_id: str) -> dict:
     """One-time adoption: move every legacy `DEFAULT_USER_ID` document to `new_user_id`.
     Called only for the first-ever user (guarded by the caller). Returns per-collection counts."""

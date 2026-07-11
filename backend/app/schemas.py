@@ -10,6 +10,33 @@ class MeResponse(BaseModel):
     name: str = ""
     picture: str = ""
     has_persona: bool = False
+    # Bring-your-own-key state — the frontend gates on has_key (must configure a model to use
+    # the app) and shows the current tier in Settings. The key itself is NEVER returned.
+    has_key: bool = False
+    tier: str = ""
+
+
+# ---------- Model (bring-your-own-key + Swift/Sage tiers) ----------
+class ModelTierOut(BaseModel):
+    key: str
+    name: str
+    model: str
+    tagline: str
+    price: str
+
+
+class ModelStatusOut(BaseModel):
+    has_key: bool
+    tier: str = ""
+
+
+class SetKeyRequest(BaseModel):
+    api_key: str
+    tier: str
+
+
+class SetTierRequest(BaseModel):
+    tier: str
 
 
 # ---------- Words ----------

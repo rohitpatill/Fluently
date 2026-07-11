@@ -60,7 +60,7 @@ master specific vocabulary words/phrases. The user adds words; the system weaves
 naturally into conversations, judges how well the user produces them, and tracks a
 0–100 proficiency score per word with a dashboard.
 
-**Stack:** React (frontend) + FastAPI + LangChain 1.x (Python) + MongoDB Atlas (cloud, via PyMongo sync). All DB access is behind a single swappable data layer (`backend/app/repo.py`). **Multi-user via Google OAuth** ("Continue with Google" only): every stored document carries a `user_id` = a real user's id, and every request is scoped to the logged-in user. The `"default"` sentinel now only tags un-adopted legacy (pre-OAuth) data.
+**Stack:** React (frontend) + FastAPI + LangChain 1.x (Python) + MongoDB Atlas (cloud, via PyMongo sync). All DB access is behind a single swappable data layer (`backend/app/repo.py`). **Multi-user via Google OAuth** ("Continue with Google" only): every stored document carries a `user_id` = a real user's id, and every request is scoped to the logged-in user. The `"default"` sentinel now only tags un-adopted legacy (pre-OAuth) data. **Bring-your-own-key:** each user supplies their OWN Google Gemini API key (stored encrypted) and picks a model tier — the app no longer uses a shared server-side key for real users.
 
 ## Core concepts
 
@@ -133,7 +133,19 @@ naturally into conversations, judges how well the user produces them, and tracks
    `.env`-driven (`OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, secrets, `SESSION_MAX_AGE_DAYS`) so
    production is a config change, not a code change. Server-side session revocation is a future
    additive step (add a `token_version` claim) — not built yet. See `docs/oauth-handoff.md` for
-   the original decisions; API-key handling remains Phase 3 (encrypt-at-rest, NOT built).
+   the original decisions.
+10. **Bring-your-own-key + model tiers (BUILT)** — every user brings their OWN Google Gemini
+    API key and picks a **tier** that governs EVERY LLM call for them (chat + judge + utility):
+    **Swift** = `gemini-3.1-flash-lite` (cheap, everyday) | **Sage** = `gemini-3.5-flash`
+    (sharper, pricier). The tier catalogue (names/model ids/taglines/prices) is the single source
+    of truth in `config.MODEL_TIERS`. The key is stored **encrypted at rest** (Fernet, via
+    `crypto_service.py`; master `ENCRYPTION_KEY` lives ONLY in `.env` — a DB leak yields useless
+    ciphertext). `model_service.resolve_for_user(user_id)` decrypts the key + maps tier→model per
+    request; `verify_key` makes one throwaway call to validate a key before storing it. Configured
+    at onboarding step 3 ("How smart should I be?") and changeable anytime in Settings' Brain card.
+    A user with no key is GATED: LLM routes return 403 (`deps.require_model_configured`) and the
+    frontend forces the brain step. The app's own `.env` provider keys are no longer used for real
+    users. (Encrypted API-key storage was the old "Phase 3" — now built.)
 
 ## Repository layout
 
@@ -150,56 +162,62 @@ ENG/
 │   └── src/
 │       ├── main.jsx         React root: QueryClientProvider + sonner Toaster + font imports
 │       ├── index.css        Tailwind v4 @theme design tokens (colors/fonts/radii/shadows/keyframes)
-│       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle
+│       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle; model: getModelTiers/getModelStatus/setModelKey/setModelTier
 │       ├── utils.js         time formatting, persona/identity name parsing from raw markdown
-│       ├── hooks/useApi.js  TanStack Query hooks (health poll, me/auth, conversations, messages, words, stats, memory)
+│       ├── hooks/useApi.js  TanStack Query hooks (health poll, me/auth [+has_key/tier], conversations, messages, words, stats, memory, model tiers)
 │       ├── hooks/useDevMode.js localStorage-backed Developer-mode toggle (client-only, off by default)
 │       └── components/
 │           ├── Login.jsx       auth gate — single "Continue with Google" screen (Fluently-styled)
-│           ├── Onboarding.jsx  2-step persona + user form
+│           ├── Onboarding.jsx  3-step flow: persona → about you → BrainStep (key + Swift/Sage tier); exports BrainStep (reused by App's model gate)
 │           ├── Rail.jsx        responsive nav — desktop left rail; mobile bottom bar; 3 main tabs + Settings
 │           ├── Chat.jsx        desktop threads sidebar / mobile slide-out conversations drawer, topic cards, opener, messages, scoring chips, dev tools, composer
 │           ├── Words.jsx       stats cards, add+enrich, score bars, responsive rows, expandable detail with mobile-visible note edit
 │           ├── Memory.jsx      3 RAW markdown editors (identity/memory/persona) with Save → PUT .../raw
-│           ├── SettingsView.jsx Account profile (Google name/email/picture) + Log out, Developer-mode toggle, data-management hard-delete cards
-│           └── Shared.jsx      PersonaAvatar, Spinner, loaders, error screen, ScoreBar
+│           ├── SettingsView.jsx Account profile + Log out, Brain (Swift/Sage switch + replace-key), Developer-mode toggle, data-management hard-delete cards
+│           └── Shared.jsx      PersonaAvatar, Spinner, loaders, error screen, ScoreBar, TierCard (Swift/Sage brain card)
 └── backend/
-    ├── requirements.txt  (+ google-auth, PyJWT, itsdangerous for OAuth/session)
-    ├── .env.example     ← copy to .env and fill API keys + Google OAuth client id/secret + session secrets
+    ├── requirements.txt  (+ google-auth, PyJWT, itsdangerous for OAuth/session; cryptography for key encryption)
+    ├── .env.example     ← copy to .env and fill ENCRYPTION_KEY + Google OAuth client id/secret + session secrets + MONGODB_URI
     ├── pytest.ini       ← live tests deselected by default (addopts -m "not live")
-    ├── run_tests.py     ← one-shot concise test report (--live adds real-LLM smoke tests)
-    ├── tests/           ← permanent suite: conftest (isolated Mongo <db>_test + mocked LLMs;
+    ├── run_tests.py     ← AREA-SELECTABLE concise test report: `run_tests.py [area...]` (no args = all; --list; --live)
+    ├── tests/           ← permanent suite: conftest (isolated Mongo <db>_test + mocked LLMs + mocked resolve_for_user;
+    │                      seeds a key+tier so gated routes pass; ENCRYPTION_KEY from .env, never hardcoded;
     │                      `client` authed as a fixed user, `anon_client` for the real auth flow),
     │                      test_auth (OAuth flow + first-user adoption + data isolation),
     │                      test_memory, test_words, test_scoring, test_conversations, test_chat,
+    │                      test_model (BYO key/tiers/verify+encrypt/gate),
     │                      test_dashboard, test_settings, test_mongo_connection (@live),
     │                      test_live_smoke (@pytest.mark.live)
     ├── import_sqlite_to_mongo.py  ← one-time SQLite→Mongo migration script (id remap; --commit/--wipe)
     ├── data/            ← legacy pre-migration BACKUP only (old eng.db + .md files); app no longer uses it
     └── app/
-        ├── main.py              FastAPI app, CORS (credentials on), routers (incl. auth), startup (mongo ping → ensure_indexes; memory bootstrap is per-user on login)
-        ├── config.py            pydantic-settings: keys, model choices, scoring constants, user_timezone, mongodb_uri/db, Google-OAuth + session settings (redirect base, frontend url, secrets, cookie)
+        ├── main.py              FastAPI app, CORS (credentials on), routers (incl. auth, model), startup (mongo ping → ensure_indexes; memory bootstrap is per-user on login)
+        ├── config.py            pydantic-settings: encryption_key, legacy model choices, scoring constants, user_timezone, mongodb_uri/db, Google-OAuth + session settings; MODEL_TIERS (Swift/Sage source of truth) + tier_config
         ├── mongo.py             MongoDB connection (PyMongo), collection accessors (incl. users_col), ensure_indexes (incl. uq_google_sub), DEFAULT_USER_ID
-        ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here); incl. user upsert + first-login default-data adoption
-        ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids): Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id), User (google_sub/email/name/picture)
-        ├── deps.py              FastAPI auth dependencies: get_current_user (cookie→user_id, 401 else), get_current_user_obj (→ profile)
-        ├── schemas.py           all Pydantic request/response models (incl. MeResponse)
+        ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here); incl. user upsert + first-login adoption + set_user_key/set_user_tier/clear_user_model
+        ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids): Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id), User (google_sub/email/name/picture/encrypted_api_key/model_tier)
+        ├── deps.py              FastAPI auth deps: get_current_user (cookie→user_id, 401 else), get_current_user_obj (→ profile), require_model_configured (403 if no key/tier — LLM routes)
+        ├── schemas.py           all Pydantic request/response models (MeResponse [+has_key/tier], ModelTierOut/ModelStatusOut/SetKeyRequest/SetTierRequest)
         ├── prompts.py           ALL prompt templates (chat system, judge, topics, enrich, onboarding-structure, title, opener)
         ├── routers/
         │   ├── auth.py          Google OAuth + session: /api/auth/google/login + /callback, /me, /logout
-        │   ├── chat.py          POST /api/chat/{conversation_id} — full turn + judge scoring
-        │   ├── conversations.py CRUD + topic suggestions + opener + POST /api/conversations/search
+        │   ├── model.py         BYO-key model config: GET /tiers + /status, POST /key (verify+encrypt+store), PUT /tier
+        │   ├── chat.py          POST /api/chat/{conversation_id} — full turn + judge scoring (gated: require_model_configured)
+        │   ├── conversations.py CRUD + topic suggestions + opener + POST /api/conversations/search (create/opener gated)
         │   ├── words.py         CRUD + LLM enrichment on add + manual adjust + event history + PUT /note (user hook)
         │   ├── memory.py        read/append/edit (old_string->new_string) memory files + PUT persona/form + POST onboarding (LLM-structured)
+        │   ├── settings.py      data-management hard deletes (purge-all full-wipe also clears model key+tier)
         │   └── dashboard.py     GET /api/dashboard/stats
         └── services/
             ├── auth_service.py     Google OAuth flow + JWT session (build auth url, code exchange, ID-token verify, signed state/nonce, mint/decode session JWT)
-            ├── llm_service.py      init_chat_model factory (openai | anthropic | google_genai)
+            ├── crypto_service.py   Fernet encrypt/decrypt for users' API keys (ENCRYPTION_KEY from .env; never in DB)
+            ├── model_service.py    per-user model resolution: tiers_public, resolve_for_user (decrypt+map tier→model), verify_key
+            ├── llm_service.py      key-aware init_chat_model factory (provider, model, api_key) — no os.environ mutation
             ├── prompt_builder.py   dynamic system prompt assembly
-            ├── chat_service.py     manual tool-calling loop, history reconstruction, auto-title
-            ├── judge_service.py    structured-output usage judging → scoring events
+            ├── chat_service.py     manual tool-calling loop, history reconstruction, auto-title; resolves per-user model
+            ├── judge_service.py    structured-output usage judging → scoring events; resolves per-user model
             ├── scoring_service.py  scoring matrix, daily cap, lazy decay, spaced-repetition picker
-            ├── topic_service.py    topic suggestions + word enrichment
+            ├── topic_service.py    topic suggestions + word enrichment + onboarding structuring; all take user_id + resolve model
             ├── memory_service.py   free-text markdown engine over the Mongo memory_files collection (no ids/stamps; normalize_file tolerates .md)
             ├── search_service.py   BM25/regex search (ranking in Python) over Mongo-loaded messages, context windows
             └── agent_tools.py      LangChain @tool definitions (closure over user_id, not a db session)
@@ -207,7 +225,8 @@ ENG/
 
 ## API surface
 
-- **Auth:** `GET /api/auth/google/login` (→ Google consent), `GET /api/auth/google/callback` (verify → session cookie → redirect to frontend; failure → `frontend_url/?auth_error=1`), `GET /api/auth/me` (profile + `has_persona`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires the session cookie (401 without it) and is scoped to that user.
+- **Auth:** `GET /api/auth/google/login` (→ Google consent), `GET /api/auth/google/callback` (verify → session cookie → redirect to frontend; failure → `frontend_url/?auth_error=1`), `GET /api/auth/me` (profile + `has_persona` + `has_key`/`tier`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires the session cookie (401 without it) and is scoped to that user.
+- **Model (BYO key):** `GET /api/model/tiers` (Swift/Sage catalogue), `GET /api/model/status` (`{has_key, tier}`, never the key), `POST /api/model/key` (`{api_key, tier}` → verify → encrypt → store; 400 on bad key), `PUT /api/model/tier` (`{tier}` switch). LLM-using routes (`POST /api/chat/...`, `POST /api/conversations`, `.../opener`) return **403** if the user has no key/tier yet.
 - `POST /api/conversations` — new chat; picks target words; returns topic suggestions (first LLM call of a new chat)
 - `PATCH /api/conversations/{id}/category` — set topic after user picks one
 - `POST /api/conversations/{id}/opener` — persona opens the chat itself (time/memory aware)
@@ -226,11 +245,13 @@ ENG/
 
 ## Chat turn flow (backend)
 
-1. Store user message → 2. build system prompt → 3. rebuild LangChain message array from DB
-(AIMessage.tool_calls + ToolMessage pairs reconstructed with original IDs — required by
-providers) → 4. `bind_tools(...).invoke()` loop (max 6 iterations) executing tools →
-5. store assistant message with `tool_calls` JSON → 6. auto-title after first exchange →
-7. judge user message → scoring events returned in the response.
+0. (route gated by `require_model_configured` → 403 if the user has no key/tier) →
+1. Store user message → 2. resolve the user's model+key (`model_service.resolve_for_user`) +
+build system prompt → 3. rebuild LangChain message array from DB (AIMessage.tool_calls +
+ToolMessage pairs reconstructed with original IDs — required by providers) → 4.
+`bind_tools(...).invoke()` loop (max 6 iterations) executing tools, using the user's key+model →
+5. store assistant message with `tool_calls` JSON → 6. auto-title after first exchange (same
+per-user model) → 7. judge user message (same per-user model) → scoring events returned in the response.
 
 ## Conventions & decisions
 
@@ -247,18 +268,27 @@ providers) → 4. `bind_tools(...).invoke()` loop (max 6 iterations) executing t
   Google tokens. Any new persisted auth state (e.g. a future `token_version` for revocation) goes
   through `repo.py`. Verify against `docs/oauth-handoff.md` for the locked decisions.
 - Gemini must use explicit provider string `google_genai` (bare `gemini-*` infers Vertex).
-- Env keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MONGODB_URI` (SRV string incl.
-  `/fluently` db name) + `MONGODB_DB`, plus the Google-OAuth block (`GOOGLE_OAUTH_CLIENT_ID`/
-  `_SECRET`, `OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, `SESSION_SECRET`, `STATE_COOKIE_SECRET`,
-  `SESSION_MAX_AGE_DAYS`). Real secrets ONLY in `.env`; `.env.example` carries placeholders. For
-  production: change `OAUTH_REDIRECT_BASE`/`FRONTEND_URL` and add the prod callback URI in Google
-  Console — no code change (cookies auto-flip to `Secure` over https).
+- **Bring-your-own-key:** each user's Gemini key + tier live on their `User` doc; the key is
+  ENCRYPTED (`crypto_service`, Fernet, `ENCRYPTION_KEY` from `.env`). NEVER call an LLM factory
+  with the app's own key for a real user — always `model_service.resolve_for_user(user_id)` and
+  pass its `api_key`/`model` into the factory. NEVER log/return the plaintext key. NEVER rotate
+  `ENCRYPTION_KEY` (stored keys become undecryptable). Adding a model tier = add a row to
+  `config.MODEL_TIERS` (nothing else changes). NEVER hardcode any key in a test file (committed to
+  Git) — read `ENCRYPTION_KEY` from `.env`, encrypt via `crypto_service` when a test needs ciphertext.
+- Env keys: `ENCRYPTION_KEY` (Fernet, REQUIRED) + `MONGODB_URI` (SRV string incl. `/fluently` db
+  name) + `MONGODB_DB`, plus the Google-OAuth block (`GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`,
+  `OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, `SESSION_SECRET`, `STATE_COOKIE_SECRET`,
+  `SESSION_MAX_AGE_DAYS`). Provider keys (`OPENAI/ANTHROPIC/GOOGLE_API_KEY`) + DEFAULT/JUDGE/UTILITY
+  model settings are LEGACY/unused (users bring their own key). Real secrets ONLY in `.env`;
+  `.env.example` carries placeholders (incl. no real `ENCRYPTION_KEY`). For production: change
+  `OAUTH_REDIRECT_BASE`/`FRONTEND_URL` and add the prod callback URI in Google Console — no code
+  change (cookies auto-flip to `Secure` over https).
 - LLM failures in judge/topics/enrichment/title/onboarding-structuring are swallowed — never break chat or onboarding.
 - Sync PyMongo + sync routes (FastAPI threadpools them). Streaming/SSE is a planned
   upgrade (pattern documented in research: astream + StreamingResponse).
 - No summarization/compaction of history yet; no vector search yet (BM25 only) — both planned.
-- Current default models (.env): `google_genai` / `gemini-3.1-flash-lite-preview` for chat,
-  judge, and utility (user has a Gemini key). Model choice is config-only — change .env anytime.
+- Model per user = their chosen tier (Swift `gemini-3.1-flash-lite` / Sage `gemini-3.5-flash`,
+  from `config.MODEL_TIERS`); governs chat + judge + utility. Not `.env`-driven anymore.
 - Gemini quirk: `AIMessage.content` can be a LIST of content blocks, not a str — always
   flatten via `chat_service._flatten_content` before treating replies as text.
 
@@ -266,10 +296,20 @@ providers) → 4. `bind_tools(...).invoke()` loop (max 6 iterations) executing t
 
 ```
 cd backend
-.venv\Scripts\python run_tests.py           # fast suite, LLMs mocked (~5s, free)
-.venv\Scripts\python run_tests.py --live    # + real-provider smoke tests (uses .env models, costs quota)
+.venv\Scripts\python run_tests.py                 # ALL areas, LLMs mocked (~5s, free)
+.venv\Scripts\python run_tests.py words scoring   # ONLY the named area(s) — much faster
+.venv\Scripts\python run_tests.py --list          # show the area keys -> test files
+.venv\Scripts\python run_tests.py --live          # + real-provider smoke tests (real Gemini, costs quota)
 ```
 
+- **Run only the area(s) you touched.** `run_tests.py` is area-selectable: each area maps to one
+  test file (`auth, memory, words, scoring, conversations, chat, model, dashboard, settings, live`
+  — see `--list`). Pass one or more keys (space- or comma-separated) to run just those; pass
+  nothing to run everything. A change confined to one area's code path → run that area. A change to
+  SHARED plumbing (`repo`, `mongo`, `deps`, `config`, `models`, `schemas`, `prompt_builder`) can
+  affect any area → run ALL (pass nothing). Unsure → run ALL. Unknown keys are rejected (exit 2), so
+  a typo never silently runs nothing. Adding a test file ⇒ add its `key: (module, label)` row to
+  `AREAS` in `run_tests.py` in the same change.
 - **Run the suite when logic changed**: services, routers, schemas, models, scoring, or anything
   with behavior the tests actually exercise. **Skip it when nothing testable changed**: pure
   prompt wording (`prompts.py`), tool-description copy, docs/context-file edits, or a
@@ -290,7 +330,8 @@ cd backend
 React 19 + Vite, JavaScript. Run: `cd frontend && npm install && npm run dev` (http://localhost:5173;
 backend must be on :8000). `npm run build` must pass after every frontend change.
 Behavior notes:
-- Onboarding shows when persona.md has no `Name:` line (detection in App.jsx via parsePersonaName).
+- Gating order (App.jsx): health → auth (`useMe`) → onboarding (no persona `Name:` line ⇒ `<Onboarding>`) → model-config gate (`me.has_key` false ⇒ standalone `<BrainStep>`) → app. After onboarding OR the brain-gate completes, the app lands on the **Words** view (add practice words first).
+- Onboarding is 3 steps: persona → about you → "How smart should I be?" (paste Gemini key → Verify → Swift/Sage cards appear → pick → Continue). The about-text is submitted only at the end, so its LLM structuring uses the user's own key.
 - Scoring chips persist across refresh: shown from the live POST /api/chat response, and on reload
   from each user message's `word_events` (GET .../messages). Each chip is click-to-expand for the
   full judge note.
@@ -312,7 +353,7 @@ Behavior notes:
 cd backend
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env   (fill in at least one provider key + a real MONGODB_URI incl. /fluently db name)
+copy .env.example .env   (fill in ENCRYPTION_KEY [generate via Fernet.generate_key()], a real MONGODB_URI incl. /fluently db name, + the Google-OAuth block; users bring their own Gemini key at onboarding)
 uvicorn app.main:app --reload --port 8000
 ```
 

@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import Rail from './components/Rail';
 import Login from './components/Login';
-import Onboarding from './components/Onboarding';
+import Onboarding, { BrainStep } from './components/Onboarding';
 import Chat from './components/Chat';
 import Words from './components/Words';
 import Memory from './components/Memory';
@@ -43,15 +43,36 @@ export default function App() {
   // Not authenticated (no session / expired) → the login screen.
   if (!authed) return <Login />;
 
-  // Authenticated but onboarding not finished (no persona Name yet) → onboarding.
+  // Authenticated but onboarding not finished (no persona Name yet) → full onboarding
+  // (persona → about you → brain, which also sets the model key).
   if (!me.data.has_persona) {
     return (
       <Onboarding
         onComplete={() => {
+          setView('words'); // first stop after onboarding: add words to practice
           queryClient.invalidateQueries({ queryKey: ['memory'] });
           queryClient.invalidateQueries({ queryKey: ['me'] });
         }}
       />
+    );
+  }
+
+  // Persona set, but no model configured (e.g. a user who onboarded before this feature) →
+  // gate on the standalone "How smart should I be?" step until they add a working key + tier.
+  if (!me.data.has_key) {
+    return (
+      <div className="min-h-dvh bg-linear-to-b from-bg to-accent-soft flex items-center justify-center animate-fade-in overflow-y-auto px-4 py-6">
+        <div className="w-[620px] max-w-full">
+          <BrainStep
+            personaName={me.data.name}
+            onReady={() => {
+              setView('words'); // land on Words so they can start adding practice words
+              me.refetch();
+            }}
+            ctaLabel="Let's go ✦"
+          />
+        </div>
+      </div>
     );
   }
 

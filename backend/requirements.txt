@@ -16,6 +16,7 @@ dnspython>=2.6
 google-auth>=2.30
 PyJWT>=2.8
 itsdangerous>=2.1
+cryptography>=42.0   # Fernet — encrypts users' BYO API keys at rest
 
 # --- testing ---
 pytest>=8.0

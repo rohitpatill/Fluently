@@ -100,7 +100,7 @@ def onboarding(info: OnboardingInfo, user_id: str = Depends(get_current_user)):
     except Exception:
         today = datetime.now().strftime("%Y-%m-%d")
 
-    facts = topic_service.structure_onboarding_info(about, _persona_name(user_id), today)
+    facts = topic_service.structure_onboarding_info(about, _persona_name(user_id), today, user_id)
     if facts is None:  # LLM failed — keep the user's words rather than lose them
         memory_service.append("identity", about, user_id)
         return OnboardingResult(identity=[about])

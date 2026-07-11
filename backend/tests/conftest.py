@@ -17,6 +17,10 @@ load_dotenv()
 _BASE_DB = os.environ.get("MONGODB_DB", "fluently")
 os.environ["MONGODB_DB"] = f"{_BASE_DB}_test"
 
+# ENCRYPTION_KEY (Fernet) comes from .env via load_dotenv() above — NEVER hardcoded here
+# (test files are committed to Git). If it's missing, crypto tests will fail loudly, which is
+# the correct signal to add it to .env.
+
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
@@ -25,7 +29,7 @@ from app import mongo
 from app.deps import get_current_user, get_current_user_obj
 from app.main import app
 from app.models import User
-from app.services import chat_service, judge_service, memory_service, topic_service
+from app.services import chat_service, judge_service, memory_service, model_service, topic_service
 
 _COLLECTIONS = ["conversations", "messages", "words", "word_events", "memory_files", "users"]
 
@@ -53,13 +57,21 @@ def seed_user(user_id: str, *, sub: str | None = None, email: str | None = None)
 
     sub = sub or f"sub-{user_id}"
     email = email or f"{user_id}@example.com"
+    # Seed an encrypted key + tier so LLM-gated routes (chat/conversation/opener) pass. The
+    # key is a harmless placeholder encrypted with the test ENCRYPTION_KEY (from .env) — the
+    # LLM factories are mocked, so its plaintext value is never actually used to call an API.
+    from app.services import crypto_service
+
     mongo.users_col().insert_one(
         {"_id": ObjectId(user_id), "google_sub": sub, "email": email,
          "name": "Test User", "picture": "", "adopted_default": False,
+         "encrypted_api_key": crypto_service.encrypt("test-placeholder-key"),
+         "model_tier": "swift",
          "created_at": datetime.now(timezone.utc)}
     )
     memory_service.ensure_files(user_id)
-    return User(id=user_id, google_sub=sub, email=email, name="Test User")
+    return User(id=user_id, google_sub=sub, email=email, name="Test User",
+                encrypted_api_key="x", model_tier="swift")
 
 
 @pytest.fixture
@@ -67,7 +79,8 @@ def client():
     """Authenticated client, scoped to TEST_USER_ID (auth dependency overridden)."""
     seed_user(TEST_USER_ID)
     test_user = User(id=TEST_USER_ID, google_sub=f"sub-{TEST_USER_ID}",
-                     email=f"{TEST_USER_ID}@example.com", name="Test User")
+                     email=f"{TEST_USER_ID}@example.com", name="Test User",
+                     encrypted_api_key="x", model_tier="swift")
     app.dependency_overrides[get_current_user] = lambda: TEST_USER_ID
     app.dependency_overrides[get_current_user_obj] = lambda: test_user
     with TestClient(app) as c:
@@ -144,4 +157,12 @@ def mock_llms(request, monkeypatch):
     monkeypatch.setattr(chat_service, "get_utility_model", lambda *a, **k: FakeChatModel([AIMessage(content="Test Title")]))
     monkeypatch.setattr(judge_service, "get_judge_model", lambda *a, **k: structured)
     monkeypatch.setattr(topic_service, "get_utility_model", lambda *a, **k: structured)
+
+    # Each service resolves the user's per-user model before calling the (mocked) factory.
+    # Stub the resolver so tests don't need a decryptable key / real provider.
+    fake_resolved = model_service.ResolvedModel(
+        provider="google_genai", model="gemini-3.1-flash-lite", api_key="test", tier="swift"
+    )
+    for svc in (chat_service, judge_service, topic_service):
+        monkeypatch.setattr(svc, "resolve_for_user", lambda *a, **k: fake_resolved)
     yield chat_model

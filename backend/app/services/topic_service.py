@@ -8,6 +8,7 @@ from ..models import Word
 from ..mongo import DEFAULT_USER_ID
 from ..prompts import ONBOARDING_STRUCTURE_SYSTEM, TOPICS_SYSTEM, WORD_ENRICH_SYSTEM
 from .llm_service import get_utility_model
+from .model_service import resolve_for_user
 from . import memory_service
 
 
@@ -40,7 +41,8 @@ def suggest_topics(target_words: list[Word], user_id: str = DEFAULT_USER_ID) -> 
         f"RECENT CONVERSATIONS:\n{recent_titles}\n\nCURRENT TARGET WORDS: {words}"
     )
     try:
-        llm = get_utility_model(temperature=0.8).with_structured_output(TopicList)
+        r = resolve_for_user(user_id)
+        llm = get_utility_model(r.provider, r.model, api_key=r.api_key, temperature=0.8).with_structured_output(TopicList)
         return llm.invoke([SystemMessage(content=TOPICS_SYSTEM), HumanMessage(content=prompt)]).topics
     except Exception:
         return []
@@ -61,7 +63,8 @@ class OnboardingFacts(BaseModel):
     )
 
 
-def structure_onboarding_info(raw_about: str, persona_name: str, today: str) -> OnboardingFacts | None:
+def structure_onboarding_info(raw_about: str, persona_name: str, today: str,
+                              user_id: str = DEFAULT_USER_ID) -> OnboardingFacts | None:
     """Turn the free-text onboarding 'about you' dump into clean, categorized memory lines
     spread across identity/memory/persona. Returns None on failure (caller falls back to raw)."""
     if not raw_about.strip():
@@ -71,7 +74,8 @@ def structure_onboarding_info(raw_about: str, persona_name: str, today: str) -> 
         f"The user wrote this about themselves during onboarding:\n\"\"\"\n{raw_about}\n\"\"\""
     )
     try:
-        llm = get_utility_model(temperature=0).with_structured_output(OnboardingFacts)
+        r = resolve_for_user(user_id)
+        llm = get_utility_model(r.provider, r.model, api_key=r.api_key, temperature=0).with_structured_output(OnboardingFacts)
         return llm.invoke(
             [SystemMessage(content=ONBOARDING_STRUCTURE_SYSTEM), HumanMessage(content=prompt)]
         )
@@ -79,9 +83,10 @@ def structure_onboarding_info(raw_about: str, persona_name: str, today: str) -> 
         return None
 
 
-def enrich_word(text: str, kind: str) -> WordEnrichment | None:
+def enrich_word(text: str, kind: str, user_id: str = DEFAULT_USER_ID) -> WordEnrichment | None:
     try:
-        llm = get_utility_model(temperature=0).with_structured_output(WordEnrichment)
+        r = resolve_for_user(user_id)
+        llm = get_utility_model(r.provider, r.model, api_key=r.api_key, temperature=0).with_structured_output(WordEnrichment)
         return llm.invoke(
             [SystemMessage(content=WORD_ENRICH_SYSTEM), HumanMessage(content=f"{kind}: {text}")]
         )

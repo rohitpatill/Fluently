@@ -8,6 +8,7 @@ from ..models import WordEvent
 from ..mongo import DEFAULT_USER_ID
 from ..prompts import JUDGE_SYSTEM
 from .llm_service import get_judge_model
+from .model_service import resolve_for_user
 from .scoring_service import apply_event
 
 CONTEXT_MESSAGES = 6
@@ -50,7 +51,10 @@ def judge_user_message(conversation_id: str, user_message_id: str,
     )
 
     try:
-        judge = get_judge_model().with_structured_output(JudgeResult)
+        resolved = resolve_for_user(user_id)
+        judge = get_judge_model(
+            resolved.provider, resolved.model, api_key=resolved.api_key
+        ).with_structured_output(JudgeResult)
         result: JudgeResult = judge.invoke([SystemMessage(content=JUDGE_SYSTEM), HumanMessage(content=prompt)])
     except Exception:
         return []  # scoring must never break the chat flow

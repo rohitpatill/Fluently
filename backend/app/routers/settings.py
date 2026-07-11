@@ -35,11 +35,18 @@ def purge_memories(user_id: str = Depends(get_current_user)):
 def purge_all(payload: PurgeAllRequest, user_id: str = Depends(get_current_user)):
     """The nuclear option. Deletes conversations, messages, and all three memory files
     (including the persona — the app restarts at onboarding). With keep_words=True the
-    tracked words, their scores and score history survive; otherwise those are deleted too."""
+    tracked words, their scores and score history survive; otherwise those are deleted too.
+
+    keep_words=False is a TRUE full reset: it ALSO clears the user's stored model key + tier,
+    so onboarding restarts from the very beginning (persona → about → 'How smart should I be?').
+    keep_words=True leaves the model config intact (you keep practicing your words right away)."""
     n_conv, n_msg = repo.purge_conversations(user_id)
     n_words = 0
+    cleared_model = False
     if not payload.keep_words:
         n_words = repo.purge_words(user_id)
+        repo.clear_user_model(user_id)
+        cleared_model = True
     for f in ("identity", "memory", "persona"):
         memory_service.reset_file(f, user_id)
     return {
@@ -47,5 +54,6 @@ def purge_all(payload: PurgeAllRequest, user_id: str = Depends(get_current_user)
         "deleted_messages": n_msg,
         "deleted_words": n_words,
         "kept_words": payload.keep_words,
+        "cleared_model": cleared_model,
         "reset_files": ["identity", "memory", "persona"],
     }

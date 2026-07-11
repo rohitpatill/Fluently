@@ -121,6 +121,8 @@ def me(user: User = Depends(get_current_user_obj)):
         name=user.name,
         picture=user.picture,
         has_persona=_has_persona(user.id),
+        has_key=bool(user.encrypted_api_key and user.model_tier),
+        tier=user.model_tier,
     )
 
 

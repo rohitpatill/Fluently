@@ -7,7 +7,7 @@ without a real cookie (see `tests/conftest.py`).
 
 from __future__ import annotations
 
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 from . import repo
 from .config import settings
@@ -39,3 +39,15 @@ def get_current_user(request: Request) -> str:
 def get_current_user_obj(request: Request) -> User:
     """FastAPI dependency yielding the full current-user profile (for `/me`)."""
     return _user_from_request(request)
+
+
+def require_model_configured(user: User = Depends(get_current_user_obj)) -> str:
+    """Like `get_current_user`, but ALSO requires the user to have finished the
+    'How smart should I be?' setup (a stored key + tier). LLM-using routes depend on this so
+    an unconfigured user gets a clean 403 the frontend turns into the model-config gate —
+    rather than a 500 from `model_service.resolve_for_user` deep in a service.
+
+    Built on `get_current_user_obj` so test overrides of the current user flow through here."""
+    if not (user.encrypted_api_key and user.model_tier):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No model configured")
+    return user.id

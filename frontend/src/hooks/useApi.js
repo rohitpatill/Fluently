@@ -72,3 +72,13 @@ export function useMemoryFile(file, { enabled = true } = {}) {
     enabled,
   });
 }
+
+// The Swift/Sage catalogue — static per deployment, cache aggressively.
+export function useModelTiers({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['model-tiers'],
+    queryFn: api.getModelTiers,
+    enabled,
+    staleTime: Infinity,
+  });
+}

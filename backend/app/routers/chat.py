@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from .. import repo
-from ..deps import get_current_user
+from ..deps import require_model_configured
 from ..schemas import ChatRequest, ChatResponse, MessageOut, WordEventOut
 from ..services import chat_service, judge_service
 
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 @router.post("/{conversation_id}", response_model=ChatResponse)
 def send_message(
-    conversation_id: str, payload: ChatRequest, user_id: str = Depends(get_current_user)
+    conversation_id: str, payload: ChatRequest, user_id: str = Depends(require_model_configured)
 ):
     """One chat turn:
     1. store user message

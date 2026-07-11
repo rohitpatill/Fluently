@@ -27,7 +27,7 @@ def add_word(payload: WordCreate, user_id: str = Depends(get_current_user)):
     if existing:
         raise HTTPException(409, f"'{text}' is already being tracked")
     word = Word(text=text, kind=payload.kind, user_id=user_id)
-    enrichment = enrich_word(text, payload.kind)  # LLM: meaning, examples, collocations, register
+    enrichment = enrich_word(text, payload.kind, user_id)  # LLM: meaning, examples, collocations, register
     if enrichment:
         word.meaning = enrichment.meaning
         word.examples = enrichment.examples

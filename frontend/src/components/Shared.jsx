@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Zap, Sparkles, Check } from 'lucide-react';
 import { initial } from '../utils';
 
 export function PersonaAvatar({ name, size = 'md', online = false }) {
@@ -147,6 +147,57 @@ export function MemoryEditorSkeleton() {
         <Skeleton key={i} className="h-3.5 rounded-md" style={{ width: w }} />
       ))}
     </div>
+  );
+}
+
+// ── Model tier ("brain") card ──────────────────────────────────────────
+// One selectable card for a Swift/Sage tier. Sage carries a subtle visual "step up"
+// (icon + accent) so the hierarchy reads without ever calling the cheaper one "dumb".
+// Used in onboarding (pick-then-continue) and Settings (instant switch).
+export function TierCard({ tier, selected, onSelect, disabled = false }) {
+  const isSage = tier.key === 'sage';
+  const Icon = isSage ? Sparkles : Zap;
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onSelect?.(tier.key)}
+      disabled={disabled}
+      className={`relative text-left w-full rounded-2xl border p-5 transition-all cursor-pointer disabled:cursor-not-allowed ${
+        selected
+          ? 'border-accent bg-accent-soft shadow-accent'
+          : 'border-border-2 bg-surface hover:border-accent/50'
+      }`}
+    >
+      {selected && (
+        <span className="absolute top-4 right-4 w-6 h-6 rounded-full bg-accent text-white flex items-center justify-center">
+          <Check size={14} strokeWidth={3} />
+        </span>
+      )}
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+            isSage ? 'bg-accent text-white' : 'bg-accent-soft text-accent'
+          }`}
+        >
+          <Icon size={18} />
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-lg font-bold text-text leading-none">{tier.name}</span>
+            {isSage && (
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-accent">
+                More powerful
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] font-mono text-muted-2 mt-1 truncate">{tier.model}</div>
+        </div>
+      </div>
+      <p className="mt-3 mb-0 text-[13.5px] leading-relaxed text-text-3">{tier.tagline}</p>
+      <div className="mt-3 pt-3 border-t border-border-2 text-[11.5px] text-muted-2 font-mono">
+        {tier.price}
+      </div>
+    </button>
   );
 }
 

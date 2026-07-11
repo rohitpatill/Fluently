@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     utility_provider: str = "anthropic"
     utility_model: str = "claude-haiku-4-5-20251001"
 
+    # --- Bring-your-own-key model tiers (per-user Gemini keys) ---
+    # Symmetric key (Fernet) used to encrypt users' API keys at rest. Generate with
+    # `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+    # Kept ONLY in .env — never in the DB. A DB leak alone yields useless ciphertext.
+    encryption_key: str = ""
+
     # MongoDB (Atlas) — the app's primary datastore.
     mongodb_uri: str = ""
     mongodb_db: str = "fluently"
@@ -71,3 +77,34 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# --- Model tiers (the two "brains" a user can pick) ------------------------------------
+# SINGLE SOURCE OF TRUTH for the Swift/Sage choice: tier key -> everything the app and the
+# UI need. Provider is fixed to google_genai (Gemini) for now; adding a tier later = add a
+# row here (no code change elsewhere). Prices are per 1M tokens, shown verbatim in the UI.
+MODEL_TIERS: dict[str, dict] = {
+    "swift": {
+        "key": "swift",
+        "name": "Swift",
+        "provider": "google_genai",
+        "model": "gemini-3.1-flash-lite",
+        "tagline": "Quick, natural conversation. Light on your quota.",
+        "price": "Input $0.25 / Output $1.50 per 1M tokens",
+    },
+    "sage": {
+        "key": "sage",
+        "name": "Sage",
+        "provider": "google_genai",
+        "model": "gemini-3.5-flash",
+        "tagline": "Sharper, more thoughtful replies — but uses your quota noticeably faster.",
+        "price": "Input $1.50 / Output $9.00 per 1M tokens",
+    },
+}
+
+DEFAULT_MODEL_TIER = "swift"
+
+
+def tier_config(tier: str) -> dict | None:
+    """Look up a tier's config by key; None if unknown."""
+    return MODEL_TIERS.get((tier or "").strip().lower())

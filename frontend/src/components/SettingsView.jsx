@@ -6,6 +6,8 @@ import { AlertTriangle, Loader2, LogOut, MessagesSquare, NotebookPen, ShieldAler
 
 import * as api from '../api';
 import { useDevMode } from '../hooks/useDevMode';
+import { useModelTiers } from '../hooks/useApi';
+import { TierCard, Spinner } from './Shared';
 
 /* Danger levels: soft (accent-outline confirm) vs hard (type-to-confirm). */
 
@@ -156,6 +158,124 @@ function ProfileCard({ me, onLogout, loggingOut }) {
   );
 }
 
+// ── Brain (model) settings: switch Swift↔Sage instantly + replace the API key ─────────
+function BrainSettings({ me }) {
+  const queryClient = useQueryClient();
+  const tiers = useModelTiers();
+  const [switching, setSwitching] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [newKey, setNewKey] = useState('');
+  const [savingKey, setSavingKey] = useState(false);
+
+  const refreshMe = () => queryClient.invalidateQueries({ queryKey: ['me'] });
+
+  async function pick(tier) {
+    if (tier === me.tier || switching) return;
+    setSwitching(true);
+    try {
+      await api.setModelTier(tier);
+      await refreshMe();
+      toast.success(`Switched to ${tier === 'sage' ? 'Sage' : 'Swift'}`);
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  async function saveKey() {
+    const key = newKey.trim();
+    if (!key) return;
+    setSavingKey(true);
+    try {
+      // Re-verify against the current tier, then store. Falls back to swift if tier unset.
+      await api.setModelKey(key, me.tier || 'swift');
+      await refreshMe();
+      setNewKey('');
+      setShowKey(false);
+      toast.success('API key updated');
+    } catch (e) {
+      toast.error(e.message || "That key didn't work — double-check it and try again.");
+    } finally {
+      setSavingKey(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      {tiers.isLoading ? (
+        <div className="flex justify-center py-6"><Spinner /></div>
+      ) : (
+        <div className="grid sm:grid-cols-2 gap-3">
+          {(tiers.data || []).map((t) => (
+            <TierCard
+              key={t.key}
+              tier={t}
+              selected={me.tier === t.key}
+              onSelect={pick}
+              disabled={switching}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="bg-surface border border-border rounded-[18px] p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[15px] font-bold">API key</div>
+            <p className="mt-1 mb-0 text-[13px] text-muted leading-relaxed">
+              Your Gemini key is stored encrypted. Replace it anytime — it's re-checked before saving.
+            </p>
+          </div>
+          {!showKey && (
+            <button
+              onClick={() => setShowKey(true)}
+              className="shrink-0 rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border bg-transparent text-accent border-accent-soft-border hover:bg-accent-soft"
+            >
+              Replace key
+            </button>
+          )}
+        </div>
+        <AnimatePresence>
+          {showKey && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3.5 flex flex-col sm:flex-row gap-2.5">
+                <input
+                  type="password"
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  placeholder="New Gemini API key (AIza…)"
+                  autoFocus
+                  className="flex-1 bg-surface border border-border-2 rounded-[10px] px-3.5 py-2.5 text-[13.5px] font-mono outline-none text-text focus:border-accent"
+                />
+                <button
+                  onClick={saveKey}
+                  disabled={!newKey.trim() || savingKey}
+                  className="rounded-[10px] px-4 py-2.5 text-[13px] font-semibold border-none cursor-pointer text-white bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {savingKey ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
+                </button>
+                <button
+                  onClick={() => { setShowKey(false); setNewKey(''); }}
+                  className="rounded-[10px] px-4 py-2.5 text-[13px] font-semibold bg-transparent text-muted border border-border-2 cursor-pointer hover:bg-[#F1F2F6] transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsView({ personaName, me }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -196,6 +316,11 @@ export default function SettingsView({ personaName, me }) {
         <div className="mt-8">
           <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3">Account</div>
           <ProfileCard me={me} onLogout={handleLogout} loggingOut={loggingOut} />
+        </div>
+
+        <div className="mt-8">
+          <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3">Brain</div>
+          <BrainSettings me={me} />
         </div>
 
         <div className="mt-8">
@@ -244,7 +369,7 @@ export default function SettingsView({ personaName, me }) {
             <DangerCard
               icon={ShieldAlert}
               title="Delete everything"
-              description={`The full wipe: conversations, memories, ${personaName}, your words, scores, history — every trace, hard-deleted from the database. The app restarts as if installed today.`}
+              description={`The full wipe: conversations, memories, ${personaName}, your words, scores, history — plus your saved model key & tier. Every trace, hard-deleted. The app restarts as if installed today — you'll pick your brain again from scratch.`}
               buttonLabel="Delete everything"
               danger
               confirmWord="delete everything"

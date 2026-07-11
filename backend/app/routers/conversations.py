@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from .. import repo
-from ..deps import get_current_user
+from ..deps import get_current_user, require_model_configured
 from ..models import Conversation
 from ..schemas import (
     ConversationCreate,
@@ -25,7 +25,7 @@ def list_conversations(user_id: str = Depends(get_current_user)):
 
 @router.post("", response_model=NewConversationResponse)
 def create_conversation(
-    payload: ConversationCreate, user_id: str = Depends(get_current_user)
+    payload: ConversationCreate, user_id: str = Depends(require_model_configured)
 ):
     """Start a new chat: pick target words (spaced repetition), optionally suggest topics.
     The first LLM call of a new chat is the topic-suggestion call, as designed."""
@@ -93,7 +93,7 @@ def set_category(
 
 
 @router.post("/{conversation_id}/opener", response_model=MessageOut)
-def generate_opener(conversation_id: str, user_id: str = Depends(get_current_user)):
+def generate_opener(conversation_id: str, user_id: str = Depends(require_model_configured)):
     """Persona opens the conversation itself (time-aware, memory-aware greeting)."""
     conv = repo.get_conversation(conversation_id, user_id, with_messages=True)
     if not conv:

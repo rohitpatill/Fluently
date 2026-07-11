@@ -109,6 +109,19 @@ export const putPersonaForm = (data) =>
 export const submitOnboarding = (name, about) =>
   request('/api/memory/onboarding', { method: 'POST', body: JSON.stringify({ name, about }) });
 
+// ---------- Model (bring-your-own-key + Swift/Sage tiers) ----------
+export const getModelTiers = () => request('/api/model/tiers');
+
+export const getModelStatus = () => request('/api/model/status');
+
+// Verify + store the key for a tier (used by onboarding AND Settings 'replace key').
+export const setModelKey = (apiKey, tier) =>
+  request('/api/model/key', { method: 'POST', body: JSON.stringify({ api_key: apiKey, tier }) });
+
+// Switch tier with the already-stored key (Settings Swift↔Sage toggle).
+export const setModelTier = (tier) =>
+  request('/api/model/tier', { method: 'PUT', body: JSON.stringify({ tier }) });
+
 // ---------- Settings / data management (HARD deletes) ----------
 export const purgeConversations = () =>
   request('/api/settings/conversations', { method: 'DELETE' });

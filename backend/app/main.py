@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import mongo
-from .routers import auth, chat, conversations, dashboard, memory, settings, words
+from .routers import auth, chat, conversations, dashboard, memory, model, settings, words
 
 app = FastAPI(title="Fluently — English Proficiency Companion", version="0.1.0")
 
@@ -23,6 +23,7 @@ app.include_router(chat.router)
 app.include_router(conversations.router)
 app.include_router(words.router)
 app.include_router(memory.router)
+app.include_router(model.router)
 app.include_router(dashboard.router)
 app.include_router(settings.router)
 

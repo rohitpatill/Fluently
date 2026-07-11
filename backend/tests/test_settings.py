@@ -41,11 +41,15 @@ def test_purge_memories_keeps_persona_words_conversations(client):
 
 
 def test_purge_all_keep_words(client):
+    from app import repo
+    from tests.conftest import TEST_USER_ID
+
     wid, _ = _seed(client)
     r = client.post("/api/settings/purge-all", json={"keep_words": True})
     assert r.status_code == 200
     body = r.json()
     assert body["kept_words"] is True and body["deleted_words"] == 0
+    assert body["cleared_model"] is False  # keep-words leaves the model config intact
 
     assert client.get("/api/conversations").json() == []
     assert "Name: Jack" not in client.get("/api/memory/persona").json()["raw"]
@@ -53,13 +57,20 @@ def test_purge_all_keep_words(client):
     word = client.get(f"/api/words/{wid}").json()
     assert word["score"] == 40.0  # proficiency survived
     assert len(client.get(f"/api/words/{wid}/events").json()) == 1
+    # model key + tier must SURVIVE a keep-words reset
+    user = repo.get_user(TEST_USER_ID)
+    assert user.encrypted_api_key and user.model_tier == "swift"
 
 
 def test_purge_all_full_wipe(client):
+    from app import repo
+    from tests.conftest import TEST_USER_ID
+
     wid, _ = _seed(client)
     r = client.post("/api/settings/purge-all", json={"keep_words": False})
     assert r.status_code == 200
     assert r.json()["deleted_words"] == 1
+    assert r.json()["cleared_model"] is True  # true full reset also wipes the model config
 
     assert client.get("/api/words").json() == []
     assert client.get("/api/conversations").json() == []
@@ -67,6 +78,9 @@ def test_purge_all_full_wipe(client):
         assert client.get(f"/api/memory/{f}").json()["lines"] == []
     # fresh-start check: onboarding trigger condition (no persona Name line)
     assert "Name:" not in client.get("/api/memory/persona").json()["raw"].replace("# System Persona", "")
+    # model key + tier must be CLEARED so onboarding restarts at "How smart should I be?"
+    user = repo.get_user(TEST_USER_ID)
+    assert user.encrypted_api_key == "" and user.model_tier == ""
 
 
 def test_purges_are_idempotent(client):
