@@ -17,6 +17,7 @@ class WordOut(BaseModel):
     examples: list[str]
     collocations: list[str]
     register_notes: str
+    note: str = ""  # user's own personal memory hook
     score: float
     times_used: int
     last_used_at: datetime | None
@@ -28,6 +29,10 @@ class WordOut(BaseModel):
 class WordScoreAdjust(BaseModel):
     delta: float  # e.g. -20 for "I want to practice this more"
     reason: str = ""
+
+
+class WordNoteUpdate(BaseModel):
+    note: str  # user's personal reminder; empty string clears it
 
 
 class WordEventOut(BaseModel):

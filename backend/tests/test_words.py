@@ -41,6 +41,41 @@ def test_manual_adjust_clamped_0_100(client):
     assert client.post(f"/api/words/{wid}/adjust", json={"delta": -500}).json()["score_after"] == 0.0
 
 
+def test_set_and_clear_personal_note(client):
+    wid = client.post("/api/words", json={"text": "gallant", "kind": "word"}).json()["id"]
+    # default: empty
+    assert client.get(f"/api/words/{wid}").json()["note"] == ""
+
+    r = client.put(f"/api/words/{wid}/note", json={"note": "  Saw it in Sherlock.  "})
+    assert r.status_code == 200
+    assert r.json()["note"] == "Saw it in Sherlock."  # trimmed
+    assert client.get(f"/api/words/{wid}").json()["note"] == "Saw it in Sherlock."
+
+    # empty string clears it
+    assert client.put(f"/api/words/{wid}/note", json={"note": ""}).json()["note"] == ""
+    assert client.put("/api/words/99999/note", json={"note": "x"}).status_code == 404
+
+
+def test_personal_note_appears_in_chat_prompt(client, monkeypatch):
+    """The user's memory hook must reach the persona via the target-words block."""
+    from app.services import prompt_builder
+    from app.database import SessionLocal
+    from app.models import Conversation
+
+    wid = client.post("/api/words", json={"text": "gallant", "kind": "word"}).json()["id"]
+    client.put(f"/api/words/{wid}/note", json={"note": "Sherlock's coat scene."})
+    cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
+
+    db = SessionLocal()
+    try:
+        conv = db.get(Conversation, cid)
+        prompt = prompt_builder.build_system_prompt(db, conv)
+    finally:
+        db.close()
+    assert "Sherlock's coat scene." in prompt
+    assert "user's own memory hook" in prompt
+
+
 def test_delete_word(client):
     wid = client.post("/api/words", json={"text": "ephemeral", "kind": "word"}).json()["id"]
     assert client.delete(f"/api/words/{wid}").status_code == 200

@@ -96,15 +96,21 @@ naturally into conversations, judges how well the user produces them, and tracks
    only for time-bound facts) → other tools → behavior rules (crisp, human-like, silent
    bookkeeping, spine not sycophancy, mirror the user).
 6. **Target words** — picked per conversation by spaced repetition (lowest score, then
-   least recently used), stored on the conversation row.
+   least recently used), stored on the conversation row. Each `Word` also has an optional user
+   `note` (their own memory hook — where they saw it, a mnemonic); it's user-authored only (judge/
+   agent never write it) and is fed into the target-words prompt block so the persona can lean on
+   that association when setting the word up.
 7. **Agent tools** (in-process LangChain tools, NOT a separate MCP server — extractable later):
    `memory_update(file, action, ...)` — ONE tool, `action='append'` (text) or `'edit'`
-   (old_string→new_string, empty deletes); no read tool (whole file is always in the prompt);
+   (old_string→new_string, empty deletes); `file` is the bare name `identity|memory|persona`
+   (the tool defensively strips a stray `.md` via `memory_service.normalize_file`); no read tool
+   (whole file is always in the prompt);
    `search_conversations` (BM25 or regex over all past messages, flags: n_before/n_after context
    window, full_conversation, max_results; excludes the current conversation); `adjust_word_score`
    (manual delta by word id — ids are shown in the system prompt; agent told to use sparingly
    since the judge scores normal usage automatically). Tool calls are stored verbatim on the
-   assistant message (`tool_calls` JSON) for transparency but are not visible chat messages.
+   assistant message (`tool_calls` JSON) for transparency, and surfaced under each reply in the
+   UI's Developer mode (Settings toggle, off by default) — but are not visible chat messages.
    Tool arg descriptions are model-visible (part of the effective prompt) — keep them aligned
    with `prompts.py`'s rules (subject-free style, absolute-dates-only-when-time-bound, etc.).
 8. **Onboarding structuring** — the onboarding "about you" free-text box is NOT pasted raw. One
@@ -132,12 +138,14 @@ ENG/
 │       ├── api.js           fetch wrapper, one function per backend endpoint (base localhost:8000)
 │       ├── utils.js         time formatting, persona/identity name parsing from raw markdown
 │       ├── hooks/useApi.js  TanStack Query hooks (health poll, conversations, messages, words, stats, memory)
+│       ├── hooks/useDevMode.js localStorage-backed Developer-mode toggle (client-only, off by default)
 │       └── components/
 │           ├── Onboarding.jsx  2-step persona + user form
-│           ├── Rail.jsx        left nav — EXACTLY 3 tabs: Chat, Words, Memory
-│           ├── Chat.jsx        threads sidebar, topic cards, opener, messages (markdown), scoring chips, composer
-│           ├── Words.jsx       stats cards, add+enrich, score bars, expandable details + event history
+│           ├── Rail.jsx        left nav — 3 main tabs (Chat, Words, Memory) + Settings gear at the bottom
+│           ├── Chat.jsx        threads sidebar, topic cards, opener, messages (markdown), scoring chips (persist + expandable), dev-mode tool-call viewer, composer
+│           ├── Words.jsx       stats cards, add+enrich, score bars, expandable detail: personal note (top) + meaning + collapsible event history
 │           ├── Memory.jsx      3 RAW markdown editors (identity/memory/persona) with Save → PUT .../raw
+│           ├── SettingsView.jsx Developer-mode toggle + data-management hard-delete cards
 │           └── Shared.jsx      PersonaAvatar, Spinner, loaders, error screen, ScoreBar
 └── backend/
     ├── requirements.txt
@@ -149,16 +157,16 @@ ENG/
     │                      test_dashboard, test_settings, test_live_smoke (@pytest.mark.live)
     ├── data/            ← created at runtime: eng.db (SQLite) + the 3 memory .md files
     └── app/
-        ├── main.py              FastAPI app, CORS, routers, startup (create tables + memory files)
+        ├── main.py              FastAPI app, CORS, routers, startup (lightweight additive migrations → create tables → memory files)
         ├── config.py            pydantic-settings: keys, model choices, scoring constants, user_timezone
         ├── database.py          SQLAlchemy engine/session (SQLite)
-        ├── models.py            Conversation, Message, Word, WordEvent
+        ├── models.py            Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id)
         ├── schemas.py           all Pydantic request/response models
         ├── prompts.py           ALL prompt templates (chat system, judge, topics, enrich, onboarding-structure, title, opener)
         ├── routers/
         │   ├── chat.py          POST /api/chat/{conversation_id} — full turn + judge scoring
         │   ├── conversations.py CRUD + topic suggestions + opener + POST /api/conversations/search
-        │   ├── words.py         CRUD + LLM enrichment on add + manual adjust + event history
+        │   ├── words.py         CRUD + LLM enrichment on add + manual adjust + event history + PUT /note (user hook)
         │   ├── memory.py        read/append/edit (old_string->new_string) memory files + PUT persona/form + POST onboarding (LLM-structured)
         │   └── dashboard.py     GET /api/dashboard/stats
         └── services/
@@ -168,7 +176,7 @@ ENG/
             ├── judge_service.py    structured-output usage judging → scoring events
             ├── scoring_service.py  scoring matrix, daily cap, lazy decay, spaced-repetition picker
             ├── topic_service.py    topic suggestions + word enrichment
-            ├── memory_service.py   line-ID markdown file engine
+            ├── memory_service.py   free-text markdown file engine (no ids/stamps; normalize_file tolerates .md)
             ├── search_service.py   BM25/regex search with context windows
             └── agent_tools.py      LangChain @tool definitions (closure over db session)
 ```
@@ -178,10 +186,10 @@ ENG/
 - `POST /api/conversations` — new chat; picks target words; returns topic suggestions (first LLM call of a new chat)
 - `PATCH /api/conversations/{id}/category` — set topic after user picks one
 - `POST /api/conversations/{id}/opener` — persona opens the chat itself (time/memory aware)
-- `GET /api/conversations` / `GET .../{id}` / `GET .../{id}/messages` / `DELETE .../{id}`
+- `GET /api/conversations` / `GET .../{id}` / `GET .../{id}/messages` (each msg has `tool_calls`; user msgs also carry `word_events` so chips + dev-mode tool calls survive refresh) / `DELETE .../{id}`
 - `POST /api/conversations/search` — BM25/regex search (same engine as the agent tool)
 - `POST /api/chat/{conversation_id}` — send message, get assistant reply + scoring events
-- `GET|POST|PUT|DELETE /api/words...` — list (applies decay), add (LLM-enriched), adjust score, events
+- `GET|POST|PUT|DELETE /api/words...` — list (applies decay), add (LLM-enriched), adjust score, events, `PUT .../{id}/note` (user's own memory hook; empty clears)
 - `GET /api/memory/{identity|memory|persona}` — raw text + parsed content lines (no ids/timestamps)
 - `POST /api/memory/{file}/lines` — append a new entry (verbatim, no stamp added)
 - `POST /api/memory/{file}/edit` — `{old_string, new_string, replace_all}`; empty new_string deletes
@@ -241,7 +249,14 @@ React 19 + Vite, JavaScript. Run: `cd frontend && npm install && npm run dev` (h
 backend must be on :8000). `npm run build` must pass after every frontend change.
 Behavior notes:
 - Onboarding shows when persona.md has no `Name:` line (detection in App.jsx via parsePersonaName).
-- Scoring chips are session-only (from POST /api/chat response), not shown for reloaded history.
+- Scoring chips persist across refresh: shown from the live POST /api/chat response, and on reload
+  from each user message's `word_events` (GET .../messages). Each chip is click-to-expand for the
+  full judge note.
+- Developer mode (Settings toggle, localStorage, off by default): shows the agent's tool calls
+  (name/input/output) under each assistant reply, each call individually collapsible. Uses the
+  message's stored `tool_calls`, so it works for reloaded history too.
+- Words: expanded word detail leads with the user's personal note (add/edit inline → PUT .../note),
+  full-width meaning below, and event history as a collapsible strip at the bottom.
 - After each chat turn the app invalidates words/dashboard/memory queries (agent may have changed them).
 - Thread delete + word remove use inline two-step confirm (click → "sure?" for 2.5s), no modals.
 - Chat sends invalidate conversations (auto-title updates in sidebar).

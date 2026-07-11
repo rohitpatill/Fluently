@@ -51,6 +51,7 @@ class Word(Base):
     examples: Mapped[list] = mapped_column(JSON, default=list)  # 2-3 example sentences
     collocations: Mapped[list] = mapped_column(JSON, default=list)
     register_notes: Mapped[str] = mapped_column(Text, default="")  # formal/casual guidance
+    note: Mapped[str] = mapped_column(Text, default="")  # user's own personal memory hook for this word
     score: Mapped[float] = mapped_column(Float, default=0.0)  # 0..100
     times_used: Mapped[int] = mapped_column(Integer, default=0)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

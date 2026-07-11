@@ -81,6 +81,7 @@ def _target_words_block(db: Session, conversation: Conversation) -> str:
         lines.append(
             f'- [id={w.id}] "{w.text}" ({w.kind}, proficiency {w.score:.0f}/100): {w.meaning or "no description yet"}'
             + (f" | register: {w.register_notes}" if w.register_notes else "")
+            + (f" | user's own memory hook: \"{w.note}\"" if w.note else "")
         )
     return "\n".join(lines)
 

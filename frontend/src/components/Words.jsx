@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ChevronDown, Loader2, Plus, Trophy } from 'lucide-react';
+import { ChevronDown, Loader2, NotebookPen, Pencil, Plus, Trophy } from 'lucide-react';
 
 import * as api from '../api';
 import { useDashboardStats, useWordEvents, useWords } from '../hooks/useApi';
@@ -21,23 +21,138 @@ function StatCard({ label, value, accent, warm }) {
 }
 
 function EventHistory({ wordId, expanded }) {
-  const events = useWordEvents(wordId, expanded);
-  if (events.isLoading) return <Spinner className="w-5 h-5" />;
+  // History is collapsed by default so it never crowds the meaning — one click reveals it inline.
+  const [open, setOpen] = useState(false);
+  const show = expanded && open;
+  const events = useWordEvents(wordId, show);
   const list = events.data || [];
-  if (!list.length) return <p className="m-0 text-[12.5px] text-muted-2 font-serif-italic">No activity yet — use it in a chat.</p>;
+
   return (
-    <div className="flex flex-col gap-2 max-h-44 overflow-y-auto pr-2">
-      {list.map((ev) => (
-        <div key={ev.id} className="flex gap-2.5 text-[12.5px] items-baseline">
-          <span className="text-muted-2 w-12 shrink-0">{relativeTime(ev.created_at)}</span>
-          <span className={`font-mono font-semibold shrink-0 ${ev.delta > 0 ? 'text-[#1E7D4B]' : ev.delta < 0 ? 'text-red' : 'text-muted-2'}`}>
-            {ev.delta > 0 ? `+${ev.delta}` : ev.delta}
-          </span>
-          <span className="text-muted-2 shrink-0">{ev.event_type.replace(/_/g, ' ')}</span>
-          {ev.judge_notes && <span className="text-text-3 truncate" title={ev.judge_notes}>· {ev.judge_notes}</span>}
-        </div>
-      ))}
+    <div className="mt-1 border-t border-[#F1F2F6] pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-wider uppercase text-muted-2 hover:text-muted bg-transparent border-none cursor-pointer p-0 transition-colors"
+      >
+        <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        History
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-3">
+              {events.isLoading ? (
+                <Spinner className="w-5 h-5" />
+              ) : !list.length ? (
+                <p className="m-0 text-[12.5px] text-muted-2 font-serif-italic">No activity yet — use it in a chat.</p>
+              ) : (
+                <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-2">
+                  {list.map((ev) => (
+                    <div key={ev.id} className="flex gap-2.5 text-[12.5px] items-baseline">
+                      <span className="text-muted-2 w-12 shrink-0">{relativeTime(ev.created_at)}</span>
+                      <span className={`font-mono font-semibold shrink-0 ${ev.delta > 0 ? 'text-[#1E7D4B]' : ev.delta < 0 ? 'text-red' : 'text-muted-2'}`}>
+                        {ev.delta > 0 ? `+${ev.delta}` : ev.delta}
+                      </span>
+                      <span className="text-muted-2 shrink-0">{ev.event_type.replace(/_/g, ' ')}</span>
+                      {ev.judge_notes && <span className="text-text-3" title={ev.judge_notes}>· {ev.judge_notes}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+function PersonalNote({ word }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(word.note || '');
+
+  const save = useMutation({
+    mutationFn: (note) => api.setWordNote(word.id, note),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['words'] });
+      setEditing(false);
+      toast.success('Note saved');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  function startEdit() {
+    setDraft(word.note || '');
+    setEditing(true);
+  }
+
+  if (editing) {
+    return (
+      <div className="bg-accent-soft/40 border border-accent-soft-border rounded-xl p-3">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider uppercase text-accent-hover mb-2">
+          <NotebookPen size={12} /> My note
+        </div>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          autoFocus
+          rows={2}
+          placeholder="Your own way to remember it — where you saw it, a hook, a translation…"
+          className="w-full bg-surface border border-border-2 rounded-lg px-3 py-2 text-[13.5px] outline-none text-text resize-none leading-relaxed focus:border-accent-soft-border"
+        />
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={() => save.mutate(draft.trim())}
+            disabled={save.isPending}
+            className="text-xs font-semibold text-white bg-accent hover:bg-accent-hover rounded-lg px-3 py-1.5 border-none cursor-pointer disabled:opacity-50 transition-colors"
+          >
+            {save.isPending ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            className="text-xs font-semibold text-muted bg-transparent border border-border-2 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-[#F1F2F6] transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (word.note) {
+    return (
+      <div className="group/note bg-accent-soft/40 border border-accent-soft-border rounded-xl p-3">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider uppercase text-accent-hover">
+            <NotebookPen size={12} /> My note
+          </div>
+          <button
+            onClick={startEdit}
+            title="Edit note"
+            className="text-muted-2 hover:text-accent bg-transparent border-none cursor-pointer opacity-0 group-hover/note:opacity-100 transition-opacity"
+          >
+            <Pencil size={13} />
+          </button>
+        </div>
+        <p className="m-0 text-[13.5px] leading-relaxed text-text-2">{word.note}</p>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={startEdit}
+      className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium text-accent bg-transparent border border-dashed border-accent-soft-border rounded-lg px-3 py-1.5 cursor-pointer hover:bg-accent-soft transition-colors"
+    >
+      <Plus size={13} /> Add a personal note
+    </button>
   );
 }
 
@@ -86,49 +201,45 @@ function WordRow({ word, expanded, onToggle }) {
             transition={{ duration: 0.22 }}
             className="overflow-hidden"
           >
-            <div className="grid grid-cols-[1.2fr_1fr] gap-7 px-6 pb-5 pt-1">
-              <div className="flex flex-col gap-2.5">
-                <p className="m-0 text-[13.5px] leading-relaxed text-text-3">
-                  <strong>Meaning</strong> — {word.meaning || 'No description yet.'}
-                  {word.register_notes && <span className="text-muted-2"> · {word.register_notes}</span>}
-                </p>
-                {word.examples?.slice(0, 2).map((ex, i) => (
-                  <p key={i} className="m-0 text-[13.5px] leading-relaxed text-text-3 font-serif-italic">“{ex}”</p>
-                ))}
-                {word.collocations?.length > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {word.collocations.map((c, i) => (
-                      <span key={i} className="text-xs bg-[#F1F2F6] rounded-full px-3 py-1 text-text-3">{c}</span>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center gap-2.5 mt-1">
-                  <span className="text-xs text-muted-2">Practice more:</span>
-                  <button
-                    onClick={() => lower.mutate()}
-                    disabled={lower.isPending || word.score <= 0}
-                    className="text-xs font-semibold text-accent bg-transparent border border-accent-soft-border rounded-full px-3 py-1 cursor-pointer hover:bg-accent-soft disabled:opacity-45 transition-colors"
-                  >
-                    lower score −10
-                  </button>
-                  {confirmRemove ? (
-                    <button onClick={() => remove.mutate()} className="text-xs font-semibold text-red bg-transparent border-none cursor-pointer">
-                      confirm remove?
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => { setConfirmRemove(true); setTimeout(() => setConfirmRemove(false), 2500); }}
-                      className="text-xs text-[#B4B8C4] hover:text-red bg-transparent border-none cursor-pointer transition-colors"
-                    >
-                      remove word
-                    </button>
-                  )}
+            <div className="flex flex-col gap-3 px-6 pb-5 pt-1 max-w-[720px]">
+              <PersonalNote word={word} />
+              <p className="m-0 text-[13.5px] leading-relaxed text-text-3">
+                <strong>Meaning</strong> — {word.meaning || 'No description yet.'}
+                {word.register_notes && <span className="text-muted-2"> · {word.register_notes}</span>}
+              </p>
+              {word.examples?.slice(0, 2).map((ex, i) => (
+                <p key={i} className="m-0 text-[13.5px] leading-relaxed text-text-3 font-serif-italic">“{ex}”</p>
+              ))}
+              {word.collocations?.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {word.collocations.map((c, i) => (
+                    <span key={i} className="text-xs bg-[#F1F2F6] rounded-full px-3 py-1 text-text-3">{c}</span>
+                  ))}
                 </div>
+              )}
+              <div className="flex items-center gap-2.5 mt-1">
+                <span className="text-xs text-muted-2">Practice more:</span>
+                <button
+                  onClick={() => lower.mutate()}
+                  disabled={lower.isPending || word.score <= 0}
+                  className="text-xs font-semibold text-accent bg-transparent border border-accent-soft-border rounded-full px-3 py-1 cursor-pointer hover:bg-accent-soft disabled:opacity-45 transition-colors"
+                >
+                  lower score −10
+                </button>
+                {confirmRemove ? (
+                  <button onClick={() => remove.mutate()} className="text-xs font-semibold text-red bg-transparent border-none cursor-pointer">
+                    confirm remove?
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setConfirmRemove(true); setTimeout(() => setConfirmRemove(false), 2500); }}
+                    className="text-xs text-[#B4B8C4] hover:text-red bg-transparent border-none cursor-pointer transition-colors"
+                  >
+                    remove word
+                  </button>
+                )}
               </div>
-              <div>
-                <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-2.5">History</div>
-                <EventHistory wordId={word.id} expanded={expanded} />
-              </div>
+              <EventHistory wordId={word.id} expanded={expanded} />
             </div>
           </motion.div>
         )}

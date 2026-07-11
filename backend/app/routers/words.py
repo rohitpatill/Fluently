@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Word, WordEvent
-from ..schemas import WordCreate, WordEventOut, WordOut, WordScoreAdjust
+from ..schemas import WordCreate, WordEventOut, WordNoteUpdate, WordOut, WordScoreAdjust
 from ..services import scoring_service
 from ..services.topic_service import enrich_word
 
@@ -56,6 +56,19 @@ def delete_word(word_id: int, db: Session = Depends(get_db)):
     db.delete(word)
     db.commit()
     return {"ok": True}
+
+
+@router.put("/{word_id}/note", response_model=WordOut)
+def set_note(word_id: int, payload: WordNoteUpdate, db: Session = Depends(get_db)):
+    """User's own memory hook for a word (where they saw it, a mnemonic, a translation).
+    Purely user-authored — the judge/agent never write here. Empty string clears it."""
+    word = db.get(Word, word_id)
+    if not word:
+        raise HTTPException(404, "Word not found")
+    word.note = payload.note.strip()
+    db.commit()
+    db.refresh(word)
+    return word
 
 
 @router.post("/{word_id}/adjust", response_model=WordEventOut)

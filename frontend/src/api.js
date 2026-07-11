@@ -68,6 +68,9 @@ export const addWord = (text, kind) =>
 export const adjustWord = (id, delta, reason) =>
   request(`/api/words/${id}/adjust`, { method: 'POST', body: JSON.stringify({ delta, reason }) });
 
+export const setWordNote = (id, note) =>
+  request(`/api/words/${id}/note`, { method: 'PUT', body: JSON.stringify({ note }) });
+
 export const deleteWord = (id) => request(`/api/words/${id}`, { method: 'DELETE' });
 
 export const getWordEvents = (id) => request(`/api/words/${id}/events`);

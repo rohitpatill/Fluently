@@ -7,11 +7,11 @@ Children: [routers/backendAppRoutersContext.md](routers/backendAppRoutersContext
 
 | File | Purpose |
 |---|---|
-| `main.py` | FastAPI app: CORS (localhost:5173/3000), includes all routers, startup creates DB tables + memory files. `GET /api/health`. |
+| `main.py` | FastAPI app: CORS (localhost:5173/3000), includes all routers. Startup: `_lightweight_migrations()` (additive SQLite `ALTER TABLE` for columns added after a user's DB was created — e.g. `words.note`; no Alembic yet) → `create_all` → ensure memory files. `GET /api/health`. |
 | `config.py` | pydantic-settings `Settings` (reads `.env`): provider keys, model choices per role (default/judge/utility), scoring constants (matrix deltas, daily cap, decay), `target_words_per_conversation=3`, `user_timezone` (default `Asia/Kolkata` — drives ALL temporal reasoning in prompts), `data_path`. Import `settings` singleton. |
 | `database.py` | SQLAlchemy engine/SessionLocal/Base + `get_db` dependency. SQLite via DATABASE_URL. |
-| `models.py` | ORM: `Conversation` (title, category, target_word_ids JSON), `Message` (conversation_id, seq, role, content, tool_calls JSON), `Word` (text, kind, meaning, examples, collocations, register_notes, score, times_used, last_used_at, last_decay_at), `WordEvent` (score-change audit log). |
-| `schemas.py` | All Pydantic request/response models for the API. Memory: `MemoryLineOut` (text only, no id/timestamp), `MemoryAppend`, `MemoryEdit` (old_string/new_string/replace_all), `OnboardingInfo`/`OnboardingResult`. |
+| `models.py` | ORM: `Conversation` (title, category, target_word_ids JSON), `Message` (conversation_id, seq, role, content, tool_calls JSON), `Word` (text, kind, meaning, examples, collocations, register_notes, `note` = user's own memory hook, score, times_used, last_used_at, last_decay_at), `WordEvent` (score-change audit log; `message_id` links an event to the user message that caused it). |
+| `schemas.py` | All Pydantic request/response models. `WordOut` includes `note`; `WordNoteUpdate` (PUT note body). `WordEventOut` carries optional `word_text` + `message_id`. `MessageOut` carries `word_events` (per-message scoring events, populated by GET .../messages). Memory: `MemoryLineOut` (text only, no id/timestamp), `MemoryAppend`, `MemoryEdit` (old_string/new_string/replace_all), `OnboardingInfo`/`OnboardingResult`. |
 | `prompts.py` | ALL prompt templates: `CHAT_SYSTEM_TEMPLATE` (dynamic blocks — see chat turn flow below), `JUDGE_SYSTEM`, `TOPICS_SYSTEM`, `WORD_ENRICH_SYSTEM`, `ONBOARDING_STRUCTURE_SYSTEM`, `TITLE_SYSTEM`, `OPENER_INSTRUCTION`, `PERSONA_FALLBACK`. Edit prompts HERE only. Tool arg descriptions in `agent_tools.py` are part of the effective prompt too (tool schemas are model-visible) — keep them consistent with the rules stated here. |
 
 ## Data flow (one chat turn)
