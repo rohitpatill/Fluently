@@ -492,11 +492,11 @@ export default function Chat({ personaName }) {
           </div>
         ) : isEmptyConversation ? (
           /* topic cards */
-          <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 md:px-12 py-7 gap-6 md:gap-7 overflow-y-auto">
-            <div className="text-center">
-              <div className="mx-auto mb-4"><PersonaAvatar name={personaName} size="lg" /></div>
+          <div className="flex-1 flex flex-col items-center justify-start md:justify-center px-4 sm:px-6 md:px-12 py-7 gap-6 md:gap-7 overflow-y-auto">
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-4 flex justify-center"><PersonaAvatar name={personaName} size="lg" /></div>
               <h2 className="m-0 text-[26px] font-bold tracking-tight">{greeting}</h2>
-              <p className="mt-2 mb-0 text-[15px] text-muted font-serif-italic">What's on your mind? Or pick up where we left off.</p>
+              <p className="mt-2 mb-0 text-[15px] text-muted font-serif-italic">Pick a topic below, or start typing whatever's on your mind.</p>
             </div>
             {topics.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 md:gap-4 w-full max-w-[860px]">
@@ -516,8 +516,8 @@ export default function Chat({ personaName }) {
                 ))}
               </div>
             )}
-            <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3.5 text-center">
-              <span className="text-[13px] text-muted-2">Just start typing below, or</span>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3.5">
+              <span className="text-[13px] text-muted-2">or</span>
               <button
                 onClick={letPersonaStart}
                 disabled={typing}
@@ -570,7 +570,7 @@ export default function Chat({ personaName }) {
         {/* composer */}
         {activeId != null && (
           <div className="px-4 sm:px-6 md:px-[8%] pb-4 md:pb-6 pt-2 shrink-0">
-            <div className="bg-surface border border-border-2 rounded-[18px] shadow-[0_12px_30px_-14px_rgba(26,29,39,.18)] px-3.5 md:px-4.5 py-3 flex items-end gap-3">
+            <div className="bg-surface border border-border-2 rounded-[18px] shadow-[0_12px_30px_-14px_rgba(26,29,39,.18)] px-3.5 md:px-4.5 py-2.5 flex items-center gap-3">
               <textarea
                 ref={inputRef}
                 value={draft}

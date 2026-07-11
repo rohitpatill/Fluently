@@ -44,6 +44,22 @@ def test_live_judge_scores_target_word(client):
     assert client.get(f"/api/words/{wid}").json()["score"] > 0
 
 
+def test_live_opener(client):
+    """The persona opens the chat itself (user_content=None). Regression guard: the opener
+    directive must reach the provider as a HumanMessage, else Gemini rejects the system-only
+    request with `contents are required.`"""
+    client.put(
+        "/api/memory/persona/form",
+        json={"name": "Jack", "relation": "best friend", "personality": "warm", "speaking_style": "casual"},
+    )
+    cid = _new_conv(client)
+    r = client.post(f"/api/conversations/{cid}/opener")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["role"] == "assistant"
+    assert body["content"].strip(), "opener produced an empty message"
+
+
 def test_live_topic_suggestions(client):
     client.post("/api/memory/identity/lines", json={"text": "User is a software developer who loves astronomy."})
     r = client.post("/api/conversations", json={"suggest_topics": True})

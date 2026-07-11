@@ -61,10 +61,15 @@ def run_agent_turn(
         conversation.messages.append(user_msg)
 
     system = prompt_builder.build_system_prompt(conversation)
-    if extra_instruction:
-        system += "\n\n" + extra_instruction
 
     messages: list = [SystemMessage(content=system)] + _history_messages(conversation)
+
+    # An extra instruction (e.g. the opener directive) is delivered as a HumanMessage, NOT
+    # appended to the system prompt. This keeps `contents` non-empty on the opener flow
+    # (user_content=None, no history) — Gemini (google_genai) rejects a system-only request
+    # with `ValueError: contents are required.`
+    if extra_instruction:
+        messages.append(HumanMessage(content=extra_instruction))
 
     tools = build_tools(current_conversation_id=conversation.id, user_id=conversation.user_id)
     tool_map = {t.name: t for t in tools}
