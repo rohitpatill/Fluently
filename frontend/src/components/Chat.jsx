@@ -8,6 +8,7 @@ import { ChevronDown, Menu, Plus, Search, Send, Sparkles, Trash2, Wrench, X } fr
 import * as api from '../api';
 import { useConversations, useMessages } from '../hooks/useApi';
 import { useDevMode } from '../hooks/useDevMode';
+import useKeyboardInset from '../hooks/useKeyboardInset';
 import { PersonaAvatar, Spinner, ThreadItemSkeleton, MessageBubbleSkeleton } from './Shared';
 import { formatThreadTime, nowClockLabel } from '../utils';
 
@@ -179,6 +180,7 @@ export default function Chat({ personaName }) {
   const messages = useMessages(activeId);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+  const { inset: keyboardInset } = useKeyboardInset();
 
   useEffect(() => {
     const t = setInterval(() => setClock(nowClockLabel()), 30000);
@@ -192,7 +194,7 @@ export default function Chat({ personaName }) {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages.data, typing, pendingUser]);
+  }, [messages.data, typing, pendingUser, keyboardInset]);
 
   useEffect(() => {
     setThreadsOpen(false);
@@ -445,7 +447,10 @@ export default function Chat({ personaName }) {
       </AnimatePresence>
 
       {/* main */}
-      <div className="flex-1 min-h-0 flex flex-col bg-bg min-w-0">
+      <div
+        className="flex-1 min-h-0 flex flex-col bg-bg min-w-0"
+        style={keyboardInset ? { paddingBottom: keyboardInset } : undefined}
+      >
         {/* header */}
         <div className="h-[64px] md:h-[72px] flex items-center justify-between gap-3 px-4 md:px-8 border-b border-border shrink-0">
           <button

@@ -11,11 +11,13 @@ import Memory from './components/Memory';
 import SettingsView from './components/SettingsView';
 import { FullScreenError, FullScreenLoader } from './components/Shared';
 import { useHealth, useMe, useMemoryFile, usePersonaMemory } from './hooks/useApi';
+import useKeyboardInset from './hooks/useKeyboardInset';
 import { parseIdentityName, parsePersonaName } from './utils';
 
 export default function App() {
   const [view, setView] = useState('chat');
   const queryClient = useQueryClient();
+  const { open: keyboardOpen } = useKeyboardInset();
 
   const health = useHealth();
   const me = useMe();
@@ -83,8 +85,8 @@ export default function App() {
 
   return (
     <div className="h-dvh min-h-0 flex flex-col md:flex-row animate-fade-in">
-      <Rail view={view} setView={setView} personaName={personaName} userName={userName} me={me.data} />
-      <div className="flex-1 min-w-0 min-h-0 h-full pb-[76px] md:pb-0">
+      <Rail view={view} setView={setView} personaName={personaName} userName={userName} me={me.data} hidden={keyboardOpen} />
+      <div className={`flex-1 min-w-0 min-h-0 h-full md:pb-0 ${keyboardOpen ? 'pb-0' : 'pb-[76px]'}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={view}
