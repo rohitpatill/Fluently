@@ -7,6 +7,7 @@ import Onboarding from './components/Onboarding';
 import Chat from './components/Chat';
 import Words from './components/Words';
 import Memory from './components/Memory';
+import SettingsView from './components/SettingsView';
 import { FullScreenError, FullScreenLoader } from './components/Shared';
 import { useHealth, useMemoryFile, usePersonaMemory } from './hooks/useApi';
 import { parseIdentityName, parsePersonaName } from './utils';
@@ -62,6 +63,7 @@ export default function App() {
             {view === 'chat' && <Chat personaName={personaName} />}
             {view === 'words' && <Words />}
             {view === 'memory' && <Memory personaName={personaName} />}
+            {view === 'settings' && <SettingsView personaName={personaName} />}
           </motion.div>
         </AnimatePresence>
       </div>

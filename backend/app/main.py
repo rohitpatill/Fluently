@@ -6,10 +6,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine
-from .routers import chat, conversations, dashboard, memory, words
+from .routers import chat, conversations, dashboard, memory, settings, words
 from .services import memory_service
 
-app = FastAPI(title="ENG — English Proficiency Companion", version="0.1.0")
+app = FastAPI(title="Fluently — English Proficiency Companion", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,6 +24,7 @@ app.include_router(conversations.router)
 app.include_router(words.router)
 app.include_router(memory.router)
 app.include_router(dashboard.router)
+app.include_router(settings.router)
 
 
 @app.on_event("startup")

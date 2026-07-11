@@ -1,0 +1,17 @@
+# backendAppServicesContext.md — scope: `backend/app/services/`
+
+All business logic. Parent: [../backendAppContext.md](../backendAppContext.md).
+
+| File | Purpose & key functions |
+|---|---|
+| `llm_service.py` | Model factory via LangChain `init_chat_model`. `get_chat_model(provider?, model?)`, `get_judge_model()` (temp 0), `get_utility_model()`. Providers: openai / anthropic / google_genai (Gemini MUST use explicit `google_genai`). Pushes .env keys into os.environ. |
+| `chat_service.py` | Core turn engine. `run_agent_turn(db, conversation, user_content?, provider?, model?, extra_instruction?)` — user_content=None ⇒ opener flow. `_history_messages` rebuilds AIMessage(tool_calls)+ToolMessage pairs with ORIGINAL ids (providers reject mismatches). `_flatten_content` — Gemini returns content as block LIST; always flatten. Tool loop max 6 iterations; tool errors returned to model, never raised. `_maybe_set_title` after first exchange (failure swallowed). |
+| `judge_service.py` | `judge_user_message(db, conversation_id, user_message_id)` — judges ALL tracked words (not just conversation targets) with structured output (`JudgeResult`), last 6 messages as context, maps classifications to scoring events. Any exception ⇒ returns [] (never breaks chat). |
+| `scoring_service.py` | SINGLE SOURCE OF TRUTH for scores. `apply_event(db, word, event_type, ...)` — matrix: perfect_unprompted +5, perfect_prompted +3, awkward +1, wrong −2, passive +0.5, manual=delta (bypasses cap). Daily cap +10 (positive non-manual only). Clamp 0–100. `apply_decay` (lazy, −1/week after 14 idle days, called on words list reads). `pick_target_words` (lowest score, then least recently used; excludes score 100). |
+| `prompt_builder.py` | `build_system_prompt(db, conversation)` — assembles CHAT_SYSTEM_TEMPLATE: persona block (from persona.md, fallback if unset) → identity.md → memory.md → target words with [id=N] + scores → local time with UTC offset → category → (template contains tool rules + behavior rules). |
+| `memory_service.py` | Line-ID markdown engine for identity/memory/persona files in DATA_DIR. Entry format: `[i042] 2026-07-11 14:03 +05:30 | fact`. `append/update/delete` (by line id, KeyError if missing), `parse_lines`, `read_file`, `write_raw` (whole-file overwrite), `set_persona` (rewrites header, keeps [pNNN] lines), `ensure_files`. IDs never reused. |
+| `search_service.py` | `search(db, query, mode=bm25|regex, conversation_id?, n_before, n_after, full_conversation, max_results, exclude_conversation_id?)` — BM25 (rank_bm25) or regex over all messages, context windows, overlapping-window dedup per conversation. `format_hits_for_llm` renders tool output text. |
+| `topic_service.py` | `suggest_topics(db, target_words)` (structured `TopicList`, uses identity+memory+recent titles), `enrich_word(text, kind)` (structured `WordEnrichment`: meaning/examples/collocations/register). Both return empty/None on any LLM failure. |
+| `agent_tools.py` | `build_tools(db, current_conversation_id)` → LangChain @tool list built per-request (closures over db): `memory_append/update/delete`, `search_conversations` (excludes current conversation), `adjust_word_score` (word_id/delta/reason → manual event, "[agent] {reason}" notes). Tool outputs stored on assistant Message.tool_calls. |
+
+Iron rules: LLM calls in judge/topics/enrichment/title are best-effort (swallow failures). Never change scoring outside scoring_service.py. New agent tools go in agent_tools.py + get mentioned in prompts.py tool rules.

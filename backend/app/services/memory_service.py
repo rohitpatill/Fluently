@@ -107,6 +107,11 @@ def delete(file: str, line_id: str) -> None:
     p.write_text("".join(kept), encoding="utf-8")
 
 
+def reset_file(file: str) -> None:
+    """Hard-reset a memory file back to its pristine header (all entries gone)."""
+    _path(file).write_text(_HEADERS[file], encoding="utf-8")
+
+
 def write_raw(file: str, raw: str) -> None:
     """Overwrite the whole file — used by the UI's markdown editor (user edits freely)."""
     ensure_files()

@@ -1,4 +1,4 @@
-import { MessageCircle, BookOpen, NotebookText } from 'lucide-react';
+import { MessageCircle, BookOpen, NotebookText, Settings } from 'lucide-react';
 import { PersonaAvatar } from './Shared';
 import { initial } from '../utils';
 
@@ -26,6 +26,14 @@ export default function Rail({ view, setView, personaName, userName }) {
         </button>
       ))}
       <div className="flex-1" />
+      <button
+        title="Settings"
+        onClick={() => setView('settings')}
+        className={`w-11 h-11 rounded-[14px] border-none cursor-pointer flex items-center justify-center transition-all mb-1.5
+          ${view === 'settings' ? 'bg-accent-soft text-accent' : 'bg-transparent text-muted hover:bg-[#F1F2F6]'}`}
+      >
+        <Settings size={19} strokeWidth={2} />
+      </button>
       <div
         title={userName}
         className="w-[34px] h-[34px] rounded-full bg-border-2 flex items-center justify-center text-[13px] font-semibold text-text-3"

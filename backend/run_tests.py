@@ -21,6 +21,7 @@ AREAS = {
     "test_conversations": "Conversations + search (BM25/regex, windows)",
     "test_chat": "Chat flow (tool loop, history, judge, title)",
     "test_dashboard": "Dashboard & health",
+    "test_settings": "Settings / data purge",
     "test_live_smoke": "LIVE provider smoke (real LLM)",
 }
 
@@ -36,7 +37,8 @@ def main() -> int:
     for line in out.splitlines():
         m = re.match(r"tests[/\\](test_\w+)\.py::(\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)", line)
         if m:
-            results[m.group(1)].append(m.group(3))
+            # unknown files still get counted so a missing AREAS entry can't crash the report
+            results.setdefault(m.group(1), []).append(m.group(3))
 
     lines = ["=" * 62, "ENG BACKEND TEST REPORT", "=" * 62]
     total_pass = total_fail = 0

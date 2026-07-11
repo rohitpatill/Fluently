@@ -90,6 +90,15 @@ export const deleteMemoryLine = (file, lineId) =>
 export const putPersonaForm = (data) =>
   request('/api/memory/persona/form', { method: 'PUT', body: JSON.stringify(data) });
 
+// ---------- Settings / data management (HARD deletes) ----------
+export const purgeConversations = () =>
+  request('/api/settings/conversations', { method: 'DELETE' });
+
+export const purgeMemories = () => request('/api/settings/memories', { method: 'DELETE' });
+
+export const purgeAll = (keepWords) =>
+  request('/api/settings/purge-all', { method: 'POST', body: JSON.stringify({ keep_words: keepWords }) });
+
 // ---------- Dashboard ----------
 export const getDashboardStats = () => request('/api/dashboard/stats');
 

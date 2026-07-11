@@ -1,10 +1,54 @@
-# ENG — English Proficiency Companion
+# Fluently (project dir: ENG) — English Proficiency Companion
+
+**App name: Fluently** — use it in all user-facing surfaces (browser tab, UI copy, API title).
 
 > **⚠️ CRITICAL INSTRUCTION — KEEP THIS FILE UP TO DATE ⚠️**
 > Every single change that affects anything documented here — new files, deleted files,
 > renamed modules, changed logic, new endpoints, schema changes, new env vars, scoring
 > rule changes — MUST be reflected in this file in the same edit session. This file is
 > the source of truth for the project structure. If you change code, update CLAUDE.md.
+
+## ⚠️ HIERARCHICAL CONTEXT SYSTEM — HIGHEST-PRIORITY RULES ⚠️
+
+Every folder where code is edited has a **context file** named after its camelCase path:
+`frontend/frontendContext.md`, `backend/backendContext.md`, `backend/app/backendAppContext.md`,
+`backend/app/services/backendAppServicesContext.md`, … Each one is the concise blueprint of
+ITS OWN scope only: what files/subfolders it contains, one-liner purposes, key data flows,
+and local editing rules — enough for any agent landing there to work without reading the
+whole codebase.
+
+**Current hierarchy:**
+```
+CLAUDE.md                                  ← top: whole-project truth (this file, most detail-dense)
+├── frontend/frontendContext.md            ← detailed scope context
+│   └── src/frontendSrcContext.md
+│       └── components/frontendSrcComponentsContext.md
+└── backend/backendContext.md              ← detailed scope context
+    ├── app/backendAppContext.md
+    │   ├── routers/backendAppRoutersContext.md
+    │   └── services/backendAppServicesContext.md
+    └── tests/backendTestsContext.md
+```
+
+**Rules (apply to EVERY edit, no exceptions):**
+1. **Before editing** anything in a folder: read the context files on the path from CLAUDE.md
+   down to that folder. That chain IS your context — do not skip levels.
+2. **After editing — WAIT FOR USER VERIFICATION before updating context files.** When a
+   change is user-requested (new feature, fix, behavior change), do NOT update context files
+   right after coding: the user will test it first, and there may be several fix iterations.
+   Only when the user confirms it works, update the context file of each touched folder.
+   Update parent context files (and CLAUDE.md) ONLY if their one-line summaries or structure
+   claims became wrong. Detail lives at the level it belongs to: deepest = most specific,
+   each parent mentions children in ~1 line each.
+   (Exception: purely structural changes the user won't test — e.g. file moves/renames —
+   update context files immediately so they never point at wrong paths.)
+3. **New folder with code** ⇒ create its context file immediately (camelCase-path naming) and
+   add one line for it in the parent context file + the hierarchy tree above.
+4. **Deleted/renamed files or folders** ⇒ fix every context file that mentions them.
+5. Keep context files CONCISE — blueprints, not documentation dumps. No duplicated prose
+   between levels; link down instead.
+6. These files are the project's memory across agents and sessions. A stale context file is
+   a bug of the highest severity — fixing it outranks the feature you came to build.
 
 ## What this is
 
