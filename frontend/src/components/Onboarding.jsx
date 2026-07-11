@@ -41,10 +41,9 @@ export default function Onboarding({ onComplete }) {
     if (!userName.trim()) return;
     setSaving(true);
     try {
-      await api.appendMemoryLine('identity', `Name: ${userName.trim()}.`);
-      if (userAbout.trim()) {
-        await api.appendMemoryLine('identity', userAbout.trim());
-      }
+      // Backend stores the name and LLM-structures the free-text "about you"
+      // into clean entries across identity / memory / persona.
+      await api.submitOnboarding(userName.trim(), userAbout.trim());
       onComplete();
     } catch (err) {
       toast.error(err.message || 'Could not save your info');
@@ -53,8 +52,47 @@ export default function Onboarding({ onComplete }) {
     }
   }
 
+  // While the "about you" dump is being structured, show a warm "getting to know you" overlay.
+  const structuring = saving && step === 2 && userAbout.trim().length > 0;
+
   return (
     <div className="h-screen bg-linear-to-b from-bg to-accent-soft flex items-center justify-center animate-fade-in">
+      <AnimatePresence>
+        {structuring && (
+          <motion.div
+            key="structuring"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-bg/85 backdrop-blur-sm"
+          >
+            <motion.div
+              animate={{ scale: [1, 1.08, 1] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <PersonaAvatar name={name} size="md" />
+            </motion.div>
+            <div className="text-center">
+              <div className="text-lg font-semibold text-text">
+                {name.trim() || 'They'} is getting to know you…
+              </div>
+              <div className="mt-1.5 text-sm text-muted flex items-center justify-center gap-1">
+                remembering what matters
+                <span className="inline-flex gap-0.5">
+                  {[0, 1, 2].map((i) => (
+                    <motion.span
+                      key={i}
+                      className="w-1 h-1 rounded-full bg-accent"
+                      animate={{ opacity: [0.2, 1, 0.2] }}
+                      transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.2 }}
+                    />
+                  ))}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="w-[620px] max-w-[90vw] flex flex-col gap-6">
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[5px] rounded-full bg-accent" />

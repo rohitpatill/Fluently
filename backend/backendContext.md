@@ -16,7 +16,8 @@ Parent: [../CLAUDE.md](../CLAUDE.md). Children: [app/backendAppContext.md](app/b
 | `run_tests.py` | One-shot concise report runner. `--live` adds real-LLM smoke tests. Writes `tests/last_report.txt`. |
 
 ## Rules for editing here
-- Run `.venv\Scripts\python run_tests.py` after EVERY meaningful change; every new API/feature gets tests in the same change.
-- LLM failures in judge/topics/enrichment/title must be swallowed (never break chat).
+- Run `.venv\Scripts\python run_tests.py` when the change touches actual LOGIC (services, routers, schemas, models, scoring). Use judgment for prompt-only edits (`prompts.py` wording, tool descriptions) — if no Python logic/schema changed, running the suite verifies nothing new (see CLAUDE.md's testing-judgment note).
+- Every new API/feature gets tests in the same change.
+- LLM failures in judge/topics/enrichment/title/onboarding-structuring must be swallowed (never break chat).
 - Scoring rules live ONLY in `app/services/scoring_service.py` (single source of truth).
 - After any change, update the context file of the folder you edited (+ parents if their summaries changed).

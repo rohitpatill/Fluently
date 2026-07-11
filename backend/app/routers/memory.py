@@ -1,7 +1,19 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import MemoryAppend, MemoryFileOut, MemoryLineOut, MemoryUpdate, PersonaForm
-from ..services import memory_service
+from ..config import settings
+from ..schemas import (
+    MemoryAppend,
+    MemoryEdit,
+    MemoryFileOut,
+    MemoryLineOut,
+    OnboardingInfo,
+    OnboardingResult,
+    PersonaForm,
+)
+from ..services import memory_service, topic_service
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
 
@@ -29,23 +41,17 @@ def append_line(file: str, payload: MemoryAppend):
     return MemoryLineOut(**memory_service.append(file, payload.text))
 
 
-@router.put("/{file}/lines/{line_id}", response_model=MemoryLineOut)
-def update_line(file: str, line_id: str, payload: MemoryUpdate):
+@router.post("/{file}/edit")
+def edit_memory(file: str, payload: MemoryEdit):
+    """Replace text in a memory file (old_string -> new_string). Empty new_string deletes."""
     _check(file)
     try:
-        return MemoryLineOut(**memory_service.update(file, line_id, payload.text))
+        result = memory_service.edit(file, payload.old_string, payload.new_string, payload.replace_all)
     except KeyError as e:
         raise HTTPException(404, str(e))
-
-
-@router.delete("/{file}/lines/{line_id}")
-def delete_line(file: str, line_id: str):
-    _check(file)
-    try:
-        memory_service.delete(file, line_id)
-    except KeyError as e:
-        raise HTTPException(404, str(e))
-    return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, **result}
 
 
 @router.put("/{file}/raw")
@@ -64,3 +70,40 @@ def set_persona(form: PersonaForm):
     """Onboarding: define who the system is (name, relation, personality...)."""
     memory_service.set_persona(form.model_dump())
     return {"ok": True}
+
+
+def _persona_name() -> str:
+    for line in memory_service.read_file("persona").splitlines():
+        if line.lower().startswith("name:"):
+            return line.split(":", 1)[1].strip() or "your companion"
+    return "your companion"
+
+
+@router.post("/onboarding", response_model=OnboardingResult)
+def onboarding(info: OnboardingInfo):
+    """Finish onboarding: store the user's name, then LLM-structure their free-text 'about you'
+    dump into clean entries spread across identity/memory/persona. Falls back to appending the
+    raw text to identity if the structuring call fails, so onboarding never breaks."""
+    name = info.name.strip()
+    if name:
+        memory_service.append("identity", f"Name: {name}.")
+
+    about = info.about.strip()
+    if not about:
+        return OnboardingResult(identity=[f"Name: {name}."] if name else [])
+
+    try:
+        today = datetime.now(ZoneInfo(settings.user_timezone)).strftime("%Y-%m-%d")
+    except Exception:
+        today = datetime.now().strftime("%Y-%m-%d")
+
+    facts = topic_service.structure_onboarding_info(about, _persona_name(), today)
+    if facts is None:  # LLM failed — keep the user's words rather than lose them
+        memory_service.append("identity", about)
+        return OnboardingResult(identity=[about])
+
+    for file in ("identity", "memory", "persona"):
+        for line in getattr(facts, file):
+            if line.strip():
+                memory_service.append(file, line.strip())
+    return OnboardingResult(identity=facts.identity, memory=facts.memory, persona=facts.persona)

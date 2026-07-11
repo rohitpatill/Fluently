@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..models import Conversation, Word
-from ..prompts import TOPICS_SYSTEM, WORD_ENRICH_SYSTEM
+from ..prompts import ONBOARDING_STRUCTURE_SYSTEM, TOPICS_SYSTEM, WORD_ENRICH_SYSTEM
 from .llm_service import get_utility_model
 from . import memory_service
 
@@ -45,6 +45,39 @@ def suggest_topics(db: Session, target_words: list[Word]) -> list[Topic]:
         return llm.invoke([SystemMessage(content=TOPICS_SYSTEM), HumanMessage(content=prompt)]).topics
     except Exception:
         return []
+
+
+class OnboardingFacts(BaseModel):
+    identity: list[str] = Field(
+        default_factory=list,
+        description="Timeless facts about who the user is (job, background, personality, tastes). No dates.",
+    )
+    memory: list[str] = Field(
+        default_factory=list,
+        description="The user's life: people they mention, relationships, events (with absolute dates), plans.",
+    )
+    persona: list[str] = Field(
+        default_factory=list,
+        description="First-person things the persona should remember about its relationship with the user.",
+    )
+
+
+def structure_onboarding_info(raw_about: str, persona_name: str, today: str) -> OnboardingFacts | None:
+    """Turn the free-text onboarding 'about you' dump into clean, categorized memory lines
+    spread across identity/memory/persona. Returns None on failure (caller falls back to raw)."""
+    if not raw_about.strip():
+        return OnboardingFacts()
+    prompt = (
+        f"Persona name: {persona_name}. Today's date: {today}.\n\n"
+        f"The user wrote this about themselves during onboarding:\n\"\"\"\n{raw_about}\n\"\"\""
+    )
+    try:
+        llm = get_utility_model(temperature=0).with_structured_output(OnboardingFacts)
+        return llm.invoke(
+            [SystemMessage(content=ONBOARDING_STRUCTURE_SYSTEM), HumanMessage(content=prompt)]
+        )
+    except Exception:
+        return None
 
 
 def enrich_word(text: str, kind: str) -> WordEnrichment | None:

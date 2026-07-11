@@ -3,10 +3,26 @@ import { motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Check, Loader2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 import * as api from '../api';
 import { useMemoryFile } from '../hooks/useApi';
 import { Spinner } from './Shared';
+
+// Markdown collapses single newlines into one paragraph. Our memory files are
+// line-oriented (one entry per line), so add a hard break (two trailing spaces)
+// to every non-blank line that is followed by another non-blank line — keeping
+// each entry on its own line while leaving blank-line paragraph gaps intact.
+function withLineBreaks(md) {
+  const lines = md.split('\n');
+  return lines
+    .map((line, i) => {
+      const next = lines[i + 1];
+      const keepBreak = line.trim() !== '' && next !== undefined && next.trim() !== '';
+      return keepBreak ? line.replace(/\s+$/, '') + '  ' : line;
+    })
+    .join('\n');
+}
 
 const TABS = (personaName) => [
   { key: 'identity', label: 'About you' },
@@ -20,6 +36,7 @@ export default function Memory({ personaName }) {
   const [text, setText] = useState('');
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [mode, setMode] = useState('view'); // 'view' (rendered) | 'edit' (raw textarea)
 
   const file = useMemoryFile(tab);
 
@@ -32,6 +49,7 @@ export default function Memory({ personaName }) {
     mutationFn: () => api.putMemoryRaw(tab, text),
     onSuccess: () => {
       setDirty(false);
+      setMode('view'); // after saving, return to the rendered view
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2000);
       queryClient.invalidateQueries({ queryKey: ['memory', tab] });
@@ -46,6 +64,7 @@ export default function Memory({ personaName }) {
     setDirty(false);
     setTab(next);
     setText('');
+    setMode('view'); // always open a memory type in rendered view
   }
 
   const lineCount = file.data ? file.data.lines.length : 0;
@@ -85,29 +104,46 @@ export default function Memory({ personaName }) {
               {file.isLoading ? 'loading…' : `${tab}.md · ${lineCount} ${lineCount === 1 ? 'entry' : 'entries'}`}
               {dirty && <span className="text-amber-text-2"> · unsaved changes</span>}
             </span>
-            <button
-              onClick={() => save.mutate()}
-              disabled={!dirty || save.isPending}
-              className={`flex items-center gap-1.5 border-none rounded-[10px] px-4 py-1.5 text-[12.5px] font-semibold cursor-pointer transition-all ${
-                justSaved
-                  ? 'bg-[#EAF8F0] text-[#1E7D4B]'
-                  : dirty
-                    ? 'bg-accent hover:bg-accent-hover text-white shadow-accent'
-                    : 'bg-[#F1F2F6] text-muted-2 cursor-default'
-              }`}
-            >
-              {save.isPending ? (
-                <><Loader2 size={12} className="animate-spin" /> Saving…</>
-              ) : justSaved ? (
-                <><Check size={12} /> Saved</>
-              ) : (
-                'Save'
-              )}
-            </button>
+            <div className="flex items-center gap-2.5">
+              {/* View / Edit segmented toggle */}
+              <div className="flex items-center gap-0.5 bg-[#F1F2F6] rounded-[9px] p-0.5">
+                {['view', 'edit'].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    disabled={file.isLoading}
+                    className={`rounded-[7px] px-3 py-1 text-[12px] font-semibold capitalize cursor-pointer transition-colors ${
+                      mode === m ? 'bg-surface text-text-2 shadow-soft' : 'text-muted-2 hover:text-text-3'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => save.mutate()}
+                disabled={!dirty || save.isPending}
+                className={`flex items-center gap-1.5 border-none rounded-[10px] px-4 py-1.5 text-[12.5px] font-semibold cursor-pointer transition-all ${
+                  justSaved
+                    ? 'bg-[#EAF8F0] text-[#1E7D4B]'
+                    : dirty
+                      ? 'bg-accent hover:bg-accent-hover text-white shadow-accent'
+                      : 'bg-[#F1F2F6] text-muted-2 cursor-default'
+                }`}
+              >
+                {save.isPending ? (
+                  <><Loader2 size={12} className="animate-spin" /> Saving…</>
+                ) : justSaved ? (
+                  <><Check size={12} /> Saved</>
+                ) : (
+                  'Save'
+                )}
+              </button>
+            </div>
           </div>
           {file.isLoading ? (
             <div className="flex-1 flex items-center justify-center"><Spinner /></div>
-          ) : (
+          ) : mode === 'edit' ? (
             <textarea
               value={text}
               onChange={(e) => { setText(e.target.value); setDirty(true); }}
@@ -115,6 +151,14 @@ export default function Memory({ personaName }) {
               className="flex-1 w-full border-none outline-none resize-none bg-transparent px-5 py-4 font-mono text-[13px] leading-[1.75] text-text-2"
               placeholder={`Nothing here yet — ${personaName} writes memories as you talk, or add your own lines.`}
             />
+          ) : text.trim() ? (
+            <div className="flex-1 overflow-y-auto px-6 py-5 text-[14px] leading-[1.75] text-text-2 [&_h1]:text-[19px] [&_h1]:font-bold [&_h1]:mt-0 [&_h1]:mb-2 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h2]:mt-4 [&_h2]:mb-1.5 [&_p]:my-2 [&_ul]:my-2 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:my-0.5 [&_code]:font-mono [&_code]:text-[13px] [&_code]:bg-[#F1F2F6] [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_a]:text-accent [&_a]:underline">
+              <ReactMarkdown>{withLineBreaks(text)}</ReactMarkdown>
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center px-6 text-center text-sm text-muted-2">
+              Nothing here yet — {personaName} writes memories as you talk. Click <span className="font-semibold mx-1">Edit</span> to add your own.
+            </div>
           )}
         </motion.div>
       </div>

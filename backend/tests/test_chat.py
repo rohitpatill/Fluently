@@ -29,13 +29,13 @@ def test_empty_message_rejected(client):
 
 
 def test_tool_calling_loop_and_transparency(client, monkeypatch):
-    """Model asks for a memory_append tool call, then answers. Verify the tool really ran
+    """Model asks for a memory_update(append) tool call, then answers. Verify the tool really ran
     and the call is stored verbatim on the assistant message."""
     cid = _new_conv(client)
     responses = [
         AIMessage(
             content="",
-            tool_calls=[{"name": "memory_append", "args": {"file": "identity", "text": "User loves telescopes."}, "id": "call_1", "type": "tool_call"}],
+            tool_calls=[{"name": "memory_update", "args": {"file": "identity", "action": "append", "text": "User loves telescopes."}, "id": "call_1", "type": "tool_call"}],
         ),
         AIMessage(content="Noted! Telescopes are fascinating."),
     ]
@@ -44,9 +44,9 @@ def test_tool_calling_loop_and_transparency(client, monkeypatch):
     r = client.post(f"/api/chat/{cid}", json={"content": "I love telescopes, remember that"})
     tool_calls = r.json()["assistant_message"]["tool_calls"]
     assert len(tool_calls) == 1
-    assert tool_calls[0]["name"] == "memory_append"
+    assert tool_calls[0]["name"] == "memory_update"
     assert tool_calls[0]["id"] == "call_1"
-    assert "Saved to identity.md" in tool_calls[0]["output"]
+    assert "identity.md" in tool_calls[0]["output"]
     # the memory line was actually written
     lines = client.get("/api/memory/identity").json()["lines"]
     assert any("telescopes" in l["text"].lower() for l in lines)
@@ -56,7 +56,7 @@ def test_history_reconstruction_includes_tool_calls(client, monkeypatch):
     """Second turn must replay the first turn's AIMessage(tool_calls)+ToolMessage pair."""
     cid = _new_conv(client)
     responses = [
-        AIMessage(content="", tool_calls=[{"name": "memory_append", "args": {"file": "memory", "text": "fact"}, "id": "c1", "type": "tool_call"}]),
+        AIMessage(content="", tool_calls=[{"name": "memory_update", "args": {"file": "memory", "action": "append", "text": "fact"}, "id": "c1", "type": "tool_call"}]),
         AIMessage(content="First reply."),
     ]
     fake1 = FakeChatModel(responses)

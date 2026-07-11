@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/eng.db"
     data_dir: str = "./data"
 
+    # User's timezone — all temporal reasoning in the prompt is computed in this zone.
+    user_timezone: str = "Asia/Kolkata"
+
     # Scoring matrix (see CLAUDE.md)
     score_perfect_unprompted: float = 5.0
     score_perfect_prompted: float = 3.0

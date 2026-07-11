@@ -1,9 +1,11 @@
 """Assembles the dynamic system prompt for every chat LLM call."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..models import Conversation, Word
 from ..prompts import CHAT_SYSTEM_TEMPLATE, PERSONA_FALLBACK
 from . import memory_service
@@ -24,12 +26,49 @@ def _persona_block() -> tuple[str, str]:
     )
 
 
+def _part_of_day(hour: int) -> str:
+    if hour < 5:
+        return "late night"
+    if hour < 12:
+        return "morning"
+    if hour < 14:
+        return "midday"
+    if hour < 18:
+        return "afternoon"
+    if hour < 22:
+        return "evening"
+    return "late night"
+
+
 def _time_block() -> str:
-    now = datetime.now(timezone.utc).astimezone()
-    off = now.strftime("%z")
+    """A compact but complete temporal map, in the user's timezone. The persona has NO
+    other clock — it must resolve every 'tomorrow' / 'next Friday' from here, and write
+    ABSOLUTE dates into memory. Kept dense on purpose: the model reads it every turn."""
+    try:
+        now = datetime.now(ZoneInfo(settings.user_timezone))
+    except Exception:
+        now = datetime.now().astimezone()
+
+    def d(dt) -> str:  # "Sat 2026-07-11"
+        return dt.strftime("%a %Y-%m-%d")
+
+    today = now.date()
+    monday = today - timedelta(days=today.weekday())  # this week's Monday
+    week = [monday + timedelta(days=i) for i in range(7)]
+    week_str = ", ".join(f"{dt.strftime('%a')} {dt.strftime('%Y-%m-%d')}" for dt in week)
+    last_week = (monday - timedelta(days=7), monday - timedelta(days=1))
+    next_week = (monday + timedelta(days=7), monday + timedelta(days=13))
+    next_month = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+
     return (
-        f"Current date/time for the user: {now.strftime('%A, %Y-%m-%d %H:%M')} "
-        f"(UTC{off[:3]}:{off[3:]}, timezone: local). Use this to reason about their day."
+        f"NOW: {now.strftime('%A, %Y-%m-%d, %I:%M %p')} ({_part_of_day(now.hour)}) "
+        f"— user timezone {settings.user_timezone}.\n"
+        f"Yesterday: {d(today - timedelta(days=1))} | Tomorrow: {d(today + timedelta(days=1))} "
+        f"| Day after: {d(today + timedelta(days=2))}\n"
+        f"This week (Mon-Sun): {week_str}\n"
+        f"Last week: {d(last_week[0])} to {d(last_week[1])} | "
+        f"Next week: {d(next_week[0])} to {d(next_week[1])}\n"
+        f"This month: {now.strftime('%B %Y')} | Next month: {next_month.strftime('%B %Y')}"
     )
 
 

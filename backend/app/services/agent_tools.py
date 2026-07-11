@@ -13,20 +13,40 @@ from ..models import Word
 from . import memory_service, scoring_service, search_service
 
 
-class MemoryAppendArgs(BaseModel):
-    file: str = Field(description="Which memory file: 'identity' (facts about the user), 'memory' (life events/people), or 'persona' (your own relationship memories)")
-    text: str = Field(description="One short factual sentence to remember")
-
-
 class MemoryUpdateArgs(BaseModel):
-    file: str = Field(description="'identity' | 'memory' | 'persona'")
-    line_id: str = Field(description="The line id to update, e.g. 'i042'")
-    text: str = Field(description="The corrected/updated sentence")
-
-
-class MemoryDeleteArgs(BaseModel):
-    file: str = Field(description="'identity' | 'memory' | 'persona'")
-    line_id: str = Field(description="The line id to delete, e.g. 'm007'")
+    file: str = Field(
+        description="Which memory file to write to: "
+        "'identity' = timeless facts about WHO THE USER IS (name, background, job/studies, goals, "
+        "tastes, personality, how they talk, recurring English mistakes) — no dates here; "
+        "'memory' = the user's LIFE (events, people and who they are, relationships, plans, "
+        "deadlines) — include an absolute date for anything time-bound; "
+        "'persona' = what YOU remember about your relationship with the user (shared jokes, "
+        "promises, moments), first-person from your side."
+    )
+    action: str = Field(
+        description="'append' to add a new memory, or 'edit' to change/remove existing text."
+    )
+    text: str = Field(
+        default="",
+        description="For action='append' ONLY: the memory to store, as one clear specific "
+        "sentence. Write it exactly as it should be saved — nothing is added for you. If it is a "
+        "time-bound fact (event/deadline/birthday/trip), include the ABSOLUTE date resolved from "
+        "the TIME block (e.g. 'Trip to Goa on 2026-07-17'), never 'tomorrow'/'next week'.",
+    )
+    old_string: str = Field(
+        default="",
+        description="For action='edit' ONLY: the exact existing text to replace. Copy it verbatim "
+        "from the memory file shown in your context (enough to be unique).",
+    )
+    new_string: str = Field(
+        default="",
+        description="For action='edit' ONLY: the replacement text. Leave EMPTY to delete the "
+        "matched text entirely.",
+    )
+    replace_all: bool = Field(
+        default=False,
+        description="For action='edit': replace every occurrence of old_string instead of just the first.",
+    )
 
 
 class SearchArgs(BaseModel):
@@ -45,29 +65,43 @@ class AdjustScoreArgs(BaseModel):
 
 
 def build_tools(db: Session, current_conversation_id: int | None = None):
-    @tool(args_schema=MemoryAppendArgs)
-    def memory_append(file: str, text: str) -> str:
-        """Save a new durable memory line about the user (identity/memory) or about your relationship with them (persona). Use whenever you learn something worth remembering."""
-        entry = memory_service.append(file, text)
-        return f"Saved to {file}.md as [{entry['line_id']}]."
-
     @tool(args_schema=MemoryUpdateArgs)
-    def memory_update(file: str, line_id: str, text: str) -> str:
-        """Update an existing memory line by its line id (shown in brackets in the file). Use instead of appending a duplicate when a fact changes."""
-        try:
-            memory_service.update(file, line_id, text)
-            return f"Updated [{line_id}] in {file}.md."
-        except KeyError as e:
-            return str(e)
-
-    @tool(args_schema=MemoryDeleteArgs)
-    def memory_delete(file: str, line_id: str) -> str:
-        """Delete a memory line by its line id when it is wrong or no longer relevant."""
-        try:
-            memory_service.delete(file, line_id)
-            return f"Deleted [{line_id}] from {file}.md."
-        except KeyError as e:
-            return str(e)
+    def memory_update(
+        file: str,
+        action: str,
+        text: str = "",
+        old_string: str = "",
+        new_string: str = "",
+        replace_all: bool = False,
+    ) -> str:
+        """Save or change what you remember about the user and your relationship. action='append'
+        adds a new memory (pass `text`, written exactly as it should be stored); action='edit'
+        replaces existing text (pass `old_string` + `new_string`; empty `new_string` deletes it).
+        The whole file is already in your context, so to edit or delete just quote the text you see.
+        Prefer editing over appending a near-duplicate when a fact changes. Store absolute dates
+        only for time-bound facts; never write a date on timeless facts like preferences or names."""
+        act = (action or "").strip().lower()
+        if act == "append":
+            if not text.strip():
+                return "append requires non-empty `text`."
+            memory_service.append(file, text)
+            return f"Saved a new memory to {file}.md."
+        if act == "edit":
+            try:
+                memory_service.edit(file, old_string, new_string, replace_all)
+            except KeyError:
+                return (
+                    f"Could not find that text in {file}.md. Copy `old_string` exactly as it "
+                    f"appears in the file (without the date/time stamp is fine)."
+                )
+            except ValueError as e:
+                return str(e)
+            return (
+                f"Deleted the matched text from {file}.md."
+                if not new_string.strip()
+                else f"Updated {file}.md."
+            )
+        return "Unknown action. Use 'append' or 'edit'."
 
     @tool(args_schema=SearchArgs)
     def search_conversations(
@@ -103,4 +137,4 @@ def build_tools(db: Session, current_conversation_id: int | None = None):
         )
         return f'"{word.text}" score changed by {event.delta:+g} to {event.score_after:g}/100.'
 
-    return [memory_append, memory_update, memory_delete, search_conversations, adjust_word_score]
+    return [memory_update, search_conversations, adjust_word_score]

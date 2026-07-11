@@ -81,14 +81,19 @@ export const putMemoryRaw = (file, raw) =>
 export const appendMemoryLine = (file, text) =>
   request(`/api/memory/${file}/lines`, { method: 'POST', body: JSON.stringify({ text }) });
 
-export const updateMemoryLine = (file, lineId, text) =>
-  request(`/api/memory/${file}/lines/${lineId}`, { method: 'PUT', body: JSON.stringify({ text }) });
-
-export const deleteMemoryLine = (file, lineId) =>
-  request(`/api/memory/${file}/lines/${lineId}`, { method: 'DELETE' });
+// Edit a memory file by text (old_string -> new_string; empty new_string deletes).
+export const editMemory = (file, oldString, newString, replaceAll = false) =>
+  request(`/api/memory/${file}/edit`, {
+    method: 'POST',
+    body: JSON.stringify({ old_string: oldString, new_string: newString, replace_all: replaceAll }),
+  });
 
 export const putPersonaForm = (data) =>
   request('/api/memory/persona/form', { method: 'PUT', body: JSON.stringify(data) });
+
+// Finish onboarding: name + free-text "about you" -> LLM-structured across the 3 memory files.
+export const submitOnboarding = (name, about) =>
+  request('/api/memory/onboarding', { method: 'POST', body: JSON.stringify({ name, about }) });
 
 // ---------- Settings / data management (HARD deletes) ----------
 export const purgeConversations = () =>

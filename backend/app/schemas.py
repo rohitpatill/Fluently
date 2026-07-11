@@ -105,8 +105,6 @@ class NewConversationResponse(BaseModel):
 
 # ---------- Memory ----------
 class MemoryLineOut(BaseModel):
-    line_id: str
-    timestamp: str
     text: str
 
 
@@ -120,8 +118,21 @@ class MemoryAppend(BaseModel):
     text: str
 
 
-class MemoryUpdate(BaseModel):
-    text: str
+class MemoryEdit(BaseModel):
+    old_string: str
+    new_string: str = ""  # empty string deletes the matched text
+    replace_all: bool = False
+
+
+class OnboardingInfo(BaseModel):
+    name: str
+    about: str = ""  # free-text "about you" box; LLM-structured into the three files
+
+
+class OnboardingResult(BaseModel):
+    identity: list[str] = []
+    memory: list[str] = []
+    persona: list[str] = []
 
 
 # ---------- Persona (onboarding form) ----------

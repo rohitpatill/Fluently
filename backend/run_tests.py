@@ -15,7 +15,7 @@ from pathlib import Path
 LIVE = "--live" in sys.argv
 
 AREAS = {
-    "test_memory": "Memory files (identity/memory/persona, line IDs)",
+    "test_memory": "Memory files (identity/memory/persona, append/edit)",
     "test_words": "Words API (add, enrich, adjust, events)",
     "test_scoring": "Scoring engine (matrix, cap, decay, spaced repetition)",
     "test_conversations": "Conversations + search (BM25/regex, windows)",

@@ -1,32 +1,33 @@
-"""Markdown memory files with stable line IDs.
+"""Free-form markdown memory files. No IDs, no machine-added stamps — the agent
+edits these files the same way it would edit any small text file (append a line, or
+replace a snippet). Whatever the agent writes is exactly what is stored.
 
 Three files live in DATA_DIR:
-  identity.md  — who the user is (facts, patterns, emotional intelligence, mistakes)
-  memory.md    — life events, relationships, ongoing situations
-  persona.md   — who the SYSTEM is (from onboarding form) + its relationship memories
+  identity.md  — facts about the USER (who they are, background, personality, how they
+                 talk, preferences, recurring English mistakes, inferred patterns)
+  memory.md    — the USER'S LIFE: events, people, relationships, ongoing situations,
+                 plans, goals, deadlines. Time-bound entries carry an ABSOLUTE date,
+                 written by the agent inside the text (the system never adds dates).
+  persona.md   — who the SYSTEM is (from onboarding) + what the persona remembers about
+                 the relationship, from its own side (shared jokes, promises, moments).
 
-Every entry is one line:  [i042] 2026-07-11 14:03 +05:30 | the fact
-Line IDs are stable — update/delete target IDs, never fuzzy text.
+The whole file is always injected into the prompt, so the agent references text
+directly (old_string / new_string) instead of by any ID it would have to track.
 """
 
-import re
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import settings
 
 FILES = {"identity": "identity.md", "memory": "memory.md", "persona": "persona.md"}
-PREFIX = {"identity": "i", "memory": "m", "persona": "p"}
 
-_LINE_RE = re.compile(r"^\[(?P<id>[a-z]\d{3,})\]\s+(?P<ts>[\d\-]+\s[\d:]+\s[+\-][\d:]+)\s*\|\s*(?P<text>.*)$")
-
+# Headers hold ONLY a markdown heading (parse_lines skips headings, so the file starts
+# with zero entries). Descriptive prose is intentionally kept out so every content line
+# is a real memory entry.
 _HEADERS = {
-    "identity": "# User Identity\n\nCore facts about the user: who they are, how they talk, "
-    "their preferences, emotional patterns, recurring English mistakes.\n\n",
-    "memory": "# Memories\n\nImportant events and situations in the user's life, "
-    "people and relationships, things to follow up on.\n\n",
-    "persona": "# System Persona\n\nWho the assistant is (set during onboarding) and its own "
-    "memories of the relationship with the user.\n\n",
+    "identity": "# User Identity\n\n",
+    "memory": "# Memories\n\n",
+    "persona": "# System Persona\n\n",
 }
 
 
@@ -43,68 +44,56 @@ def ensure_files() -> None:
             p.write_text(_HEADERS[key], encoding="utf-8")
 
 
-def _now_stamp() -> str:
-    # local time with UTC offset, e.g. "2026-07-11 14:03 +05:30"
-    now = datetime.now(timezone.utc).astimezone()
-    off = now.strftime("%z")
-    return now.strftime("%Y-%m-%d %H:%M ") + f"{off[:3]}:{off[3:]}"
-
-
 def read_file(file: str) -> str:
     ensure_files()
     return _path(file).read_text(encoding="utf-8")
 
 
 def parse_lines(file: str) -> list[dict]:
+    """Return the memory file's content lines (used only for the UI's entry count).
+    A content line is any non-empty line that is not a markdown heading."""
     entries = []
     for line in read_file(file).splitlines():
-        m = _LINE_RE.match(line.strip())
-        if m:
-            entries.append({"line_id": m["id"], "timestamp": m["ts"], "text": m["text"]})
+        s = line.strip()
+        if s and not s.startswith("#"):
+            entries.append({"text": s})
     return entries
 
 
-def _next_id(file: str) -> str:
-    prefix = PREFIX[file]
-    nums = [int(e["line_id"][1:]) for e in parse_lines(file) if e["line_id"].startswith(prefix)]
-    return f"{prefix}{(max(nums) + 1 if nums else 1):03d}"
-
-
 def append(file: str, text: str) -> dict:
+    """Add a new entry line to the end of the file. Stored verbatim — no stamp, no ID.
+    The agent is responsible for any date it wants inside the text."""
     ensure_files()
-    text = " ".join(text.strip().splitlines())  # keep entries single-line
-    line_id = _next_id(file)
-    entry = f"[{line_id}] {_now_stamp()} | {text}\n"
+    text = " ".join(text.strip().splitlines())  # one entry = one line
     p = _path(file)
     content = p.read_text(encoding="utf-8")
-    if not content.endswith("\n"):
+    if content and not content.endswith("\n"):
         content += "\n"
-    p.write_text(content + entry, encoding="utf-8")
-    return {"line_id": line_id, "timestamp": _now_stamp(), "text": text}
+    p.write_text(content + text + "\n", encoding="utf-8")
+    return {"text": text}
 
 
-def update(file: str, line_id: str, new_text: str) -> dict:
+def edit(file: str, old_string: str, new_string: str, replace_all: bool = False) -> dict:
+    """Replace text in the file (like a plain file edit). Used to correct or remove an
+    existing memory: pass the current snippet as old_string and the replacement (empty
+    string to delete) as new_string. Raises KeyError if old_string is absent."""
     ensure_files()
-    new_text = " ".join(new_text.strip().splitlines())
+    if not old_string:
+        raise ValueError("old_string must not be empty")
     p = _path(file)
-    lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
-    for i, line in enumerate(lines):
-        m = _LINE_RE.match(line.strip())
-        if m and m["id"] == line_id:
-            lines[i] = f"[{line_id}] {_now_stamp()} | {new_text}\n"
-            p.write_text("".join(lines), encoding="utf-8")
-            return {"line_id": line_id, "timestamp": _now_stamp(), "text": new_text}
-    raise KeyError(f"Line id '{line_id}' not found in {file}.md")
+    content = p.read_text(encoding="utf-8")
+    if old_string not in content:
+        raise KeyError(f"Text not found in {file}.md: {old_string!r}")
 
-
-def delete(file: str, line_id: str) -> None:
-    ensure_files()
-    p = _path(file)
-    lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
-    kept = [ln for ln in lines if not (_LINE_RE.match(ln.strip()) and _LINE_RE.match(ln.strip())["id"] == line_id)]
-    if len(kept) == len(lines):
-        raise KeyError(f"Line id '{line_id}' not found in {file}.md")
-    p.write_text("".join(kept), encoding="utf-8")
+    occurrences = content.count(old_string)
+    count = -1 if replace_all else 1
+    updated = content.replace(old_string, new_string, count)
+    if not new_string.strip():
+        # collapse a blank gap left behind by a delete-to-empty
+        while "\n\n\n" in updated:
+            updated = updated.replace("\n\n\n", "\n\n")
+    p.write_text(updated, encoding="utf-8")
+    return {"replaced": occurrences if replace_all else 1}
 
 
 def reset_file(file: str) -> None:
@@ -118,10 +107,28 @@ def write_raw(file: str, raw: str) -> None:
     _path(file).write_text(raw if raw.endswith("\n") or not raw else raw + "\n", encoding="utf-8")
 
 
+_PERSONA_FIELDS = ("Name:", "Relation to user:", "Gender:", "Personality:", "Speaking style:")
+
+
 def set_persona(form: dict) -> None:
-    """Rewrite the persona header block from the onboarding form (keeps existing [pNNN] memory lines)."""
+    """Rewrite the persona header block from the onboarding form, keeping existing
+    relationship-memory entries (any content line that isn't a header/field line)."""
     ensure_files()
-    existing = [f"[{e['line_id']}] {e['timestamp']} | {e['text']}" for e in parse_lines("persona")]
+    marker = "## Relationship memories"
+    raw = _path("persona").read_text(encoding="utf-8")
+
+    if marker in raw:
+        existing = raw.split(marker, 1)[1]
+    else:
+        # legacy/fresh file with no marker: keep any non-heading, non-field content line
+        existing = "\n".join(
+            ln for ln in raw.splitlines()
+            if ln.strip()
+            and not ln.startswith("#")
+            and not ln.strip().startswith(_PERSONA_FIELDS)
+        )
+    existing_memories = existing.strip()
+
     header = (
         "# System Persona\n\n"
         f"Name: {form.get('name', '')}\n"
@@ -129,6 +136,8 @@ def set_persona(form: dict) -> None:
         f"Gender: {form.get('gender', '')}\n"
         f"Personality: {form.get('personality', '')}\n"
         f"Speaking style: {form.get('speaking_style', '')}\n\n"
-        "## Relationship memories\n\n"
+        f"{marker}\n\n"
     )
-    _path("persona").write_text(header + "\n".join(existing) + ("\n" if existing else ""), encoding="utf-8")
+    _path("persona").write_text(
+        header + (existing_memories + "\n" if existing_memories else ""), encoding="utf-8"
+    )

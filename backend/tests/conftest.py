@@ -100,6 +100,11 @@ def mock_llms(request, monkeypatch):
         {
             judge_service.JudgeResult: judge_service.JudgeResult(judgements=[]),
             topic_service.TopicList: topic_service.TopicList(topics=[]),
+            topic_service.OnboardingFacts: topic_service.OnboardingFacts(
+                identity=["Founder of a startup.", "26 years old."],
+                memory=["Wants English to sound natural in meetings."],
+                persona=[],
+            ),
         }
     )
     monkeypatch.setattr(chat_service, "get_chat_model", lambda *a, **k: chat_model)
