@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 
 import * as api from '../api';
 import { useMemoryFile } from '../hooks/useApi';
-import { Spinner } from './Shared';
+import { MemoryEditorSkeleton } from './Shared';
 
 // Markdown collapses single newlines into one paragraph. Our memory files are
 // line-oriented (one entry per line), so add a hard break (two trailing spaces)
@@ -142,7 +142,7 @@ export default function Memory({ personaName }) {
             </div>
           </div>
           {file.isLoading ? (
-            <div className="flex-1 flex items-center justify-center"><Spinner /></div>
+            <MemoryEditorSkeleton />
           ) : mode === 'edit' ? (
             <textarea
               value={text}

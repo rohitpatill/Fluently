@@ -10,7 +10,7 @@ class WordCreate(BaseModel):
 
 
 class WordOut(BaseModel):
-    id: int
+    id: str
     text: str
     kind: str
     meaning: str
@@ -36,11 +36,11 @@ class WordNoteUpdate(BaseModel):
 
 
 class WordEventOut(BaseModel):
-    id: int
-    word_id: int
+    id: str
+    word_id: str
     word_text: str | None = None  # resolved word text (for chips) — not a column
-    conversation_id: int | None
-    message_id: int | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
     event_type: str
     delta: float
     score_after: float
@@ -58,10 +58,10 @@ class ConversationCreate(BaseModel):
 
 
 class ConversationOut(BaseModel):
-    id: int
+    id: str
     title: str
     category: str | None
-    target_word_ids: list[int]
+    target_word_ids: list[str]
     created_at: datetime
     updated_at: datetime
 
@@ -75,8 +75,8 @@ class ToolCallOut(BaseModel):
 
 
 class MessageOut(BaseModel):
-    id: int
-    conversation_id: int
+    id: str
+    conversation_id: str
     seq: int
     role: str
     content: str
@@ -158,7 +158,7 @@ class PersonaForm(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     mode: str = Field(default="bm25", pattern="^(bm25|regex)$")
-    conversation_id: int | None = None  # limit to one conversation
+    conversation_id: str | None = None  # limit to one conversation
     n_before: int = 3
     n_after: int = 3
     full_conversation: bool = False
@@ -166,8 +166,8 @@ class SearchRequest(BaseModel):
 
 
 class SearchHit(BaseModel):
-    conversation_id: int
+    conversation_id: str
     conversation_title: str
-    message_id: int
+    message_id: str
     score: float
     context: list[MessageOut]  # window of messages around the hit

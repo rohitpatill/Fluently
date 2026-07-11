@@ -16,9 +16,7 @@ Daily cap: a word can gain at most +10 per day, so one chat can't max it out.
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
+from .. import repo
 from ..config import settings
 from ..models import Word, WordEvent, utcnow
 
@@ -31,28 +29,17 @@ EVENT_DELTAS = {
 }
 
 
-def _gained_today(db: Session, word_id: int) -> float:
+def _gained_today(word_id: str) -> float:
     day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    total = (
-        db.query(func.coalesce(func.sum(WordEvent.delta), 0.0))
-        .filter(
-            WordEvent.word_id == word_id,
-            WordEvent.created_at >= day_start,
-            WordEvent.delta > 0,
-            WordEvent.event_type.notin_(["manual"]),
-        )
-        .scalar()
-    )
-    return float(total or 0.0)
+    return repo.gained_today(word_id, day_start, exclude_types=["manual"])
 
 
 def apply_event(
-    db: Session,
     word: Word,
     event_type: str,
     judge_notes: str = "",
-    conversation_id: int | None = None,
-    message_id: int | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
     manual_delta: float | None = None,
 ) -> WordEvent:
     if event_type == "manual":
@@ -60,7 +47,7 @@ def apply_event(
     else:
         delta = EVENT_DELTAS[event_type]()
         if delta > 0:
-            headroom = settings.score_daily_cap - _gained_today(db, word.id)
+            headroom = settings.score_daily_cap - _gained_today(word.id)
             delta = max(0.0, min(delta, headroom))
 
     new_score = max(0.0, min(100.0, word.score + delta))
@@ -69,6 +56,7 @@ def apply_event(
     if event_type in ("perfect_unprompted", "perfect_prompted", "awkward", "wrong"):
         word.times_used += 1
         word.last_used_at = utcnow()
+    repo.save_word(word)
 
     event = WordEvent(
         word_id=word.id,
@@ -78,14 +66,12 @@ def apply_event(
         delta=actual_delta,
         score_after=new_score,
         judge_notes=judge_notes,
+        user_id=word.user_id,
     )
-    db.add(event)
-    db.commit()
-    db.refresh(event)
-    return event
+    return repo.insert_event(event)
 
 
-def apply_decay(db: Session, word: Word) -> WordEvent | None:
+def apply_decay(word: Word) -> WordEvent | None:
     """Lazy decay: -1 per full idle week beyond 14 idle days. Called on dashboard reads."""
     now = datetime.now(timezone.utc)
     anchor = word.last_used_at or word.created_at
@@ -110,19 +96,19 @@ def apply_decay(db: Session, word: Word) -> WordEvent | None:
         return None
     word.score = new_score
     word.last_decay_at = now
+    repo.save_word(word)
     event = WordEvent(
         word_id=word.id, event_type="decay", delta=actual, score_after=new_score,
         judge_notes=f"{weeks} idle week(s) beyond {settings.decay_idle_days} days",
+        user_id=word.user_id,
     )
-    db.add(event)
-    db.commit()
-    return event
+    return repo.insert_event(event)
 
 
-def pick_target_words(db: Session, limit: int | None = None) -> list[Word]:
+def pick_target_words(limit: int | None = None, user_id: str = repo.DEFAULT_USER_ID) -> list[Word]:
     """Spaced-repetition pick: lowest score first, least-recently-used breaks ties."""
     limit = limit or settings.target_words_per_conversation
-    words = db.query(Word).filter(Word.score < 100).all()
+    words = [w for w in repo.list_words(user_id) if w.score < 100]
     epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
     def sort_key(w: Word):

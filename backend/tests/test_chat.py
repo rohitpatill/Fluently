@@ -202,7 +202,7 @@ def test_agent_adjust_score_unknown_word_id(client, monkeypatch):
             content="",
             tool_calls=[{
                 "name": "adjust_word_score",
-                "args": {"word_id": 999999, "delta": 3, "reason": "test"},
+                "args": {"word_id": "000000000000000000000000", "delta": 3, "reason": "test"},
                 "id": "call_adj2",
                 "type": "tool_call",
             }],

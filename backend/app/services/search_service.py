@@ -1,6 +1,9 @@
 """Search past conversations: BM25 ranking or regex match, with context windows.
 
-Flags (as discussed):
+The ranking is done in Python (rank_bm25 / regex), exactly as before — MongoDB is only
+the message store. Messages are loaded via repo; the algorithm below is unchanged.
+
+Flags:
   - mode: bm25 | regex
   - conversation_id: limit search to one conversation
   - n_before / n_after: messages of context around each hit
@@ -11,9 +14,10 @@ Flags (as discussed):
 import re
 
 from rank_bm25 import BM25Okapi
-from sqlalchemy.orm import Session
 
-from ..models import Conversation, Message
+from .. import repo
+from ..models import Message
+from ..mongo import DEFAULT_USER_ID
 
 
 def _tokenize(text: str) -> list[str]:
@@ -21,22 +25,21 @@ def _tokenize(text: str) -> list[str]:
 
 
 def search(
-    db: Session,
     query: str,
     mode: str = "bm25",
-    conversation_id: int | None = None,
+    conversation_id: str | None = None,
     n_before: int = 3,
     n_after: int = 3,
     full_conversation: bool = False,
     max_results: int = 5,
-    exclude_conversation_id: int | None = None,
+    exclude_conversation_id: str | None = None,
+    user_id: str = DEFAULT_USER_ID,
 ) -> list[dict]:
-    q = db.query(Message).filter(Message.role.in_(["user", "assistant"]))
-    if conversation_id is not None:
-        q = q.filter(Message.conversation_id == conversation_id)
-    if exclude_conversation_id is not None:
-        q = q.filter(Message.conversation_id != exclude_conversation_id)
-    messages: list[Message] = q.order_by(Message.conversation_id, Message.seq).all()
+    messages: list[Message] = repo.all_messages(
+        user_id=user_id,
+        conversation_id=conversation_id,
+        exclude_conversation_id=exclude_conversation_id,
+    )
     if not messages:
         return []
 
@@ -57,8 +60,8 @@ def search(
 
     # one hit per matched message, deduping overlapping windows in the same conversation
     hits: list[dict] = []
-    seen_ranges: dict[int, list[tuple[int, int]]] = {}
-    conv_titles = {c.id: c.title for c in db.query(Conversation).all()}
+    seen_ranges: dict[str, list[tuple[int, int]]] = {}
+    conv_titles = {c.id: c.title for c in repo.list_conversations(user_id)}
 
     for msg, score in scored:
         if len(hits) >= max_results:
@@ -69,7 +72,6 @@ def search(
             lo, hi = 0, len(conv_msgs) - 1
         else:
             lo, hi = max(0, idx - n_before), min(len(conv_msgs) - 1, idx + n_after)
-        # skip if this window overlaps an already-returned window in the same conversation
         ranges = seen_ranges.setdefault(msg.conversation_id, [])
         if any(lo <= r_hi and hi >= r_lo for r_lo, r_hi in ranges):
             continue

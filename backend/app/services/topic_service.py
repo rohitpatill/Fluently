@@ -2,9 +2,10 @@
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 
-from ..models import Conversation, Word
+from .. import repo
+from ..models import Word
+from ..mongo import DEFAULT_USER_ID
 from ..prompts import ONBOARDING_STRUCTURE_SYSTEM, TOPICS_SYSTEM, WORD_ENRICH_SYSTEM
 from .llm_service import get_utility_model
 from . import memory_service
@@ -27,12 +28,10 @@ class WordEnrichment(BaseModel):
     register_notes: str = Field(description="formal/informal/neutral + context warnings")
 
 
-def suggest_topics(db: Session, target_words: list[Word]) -> list[Topic]:
-    identity = memory_service.read_file("identity")[:3000]
-    memory = memory_service.read_file("memory")[:3000]
-    recent = (
-        db.query(Conversation).order_by(Conversation.updated_at.desc()).limit(8).all()
-    )
+def suggest_topics(target_words: list[Word], user_id: str = DEFAULT_USER_ID) -> list[Topic]:
+    identity = memory_service.read_file("identity", user_id)[:3000]
+    memory = memory_service.read_file("memory", user_id)[:3000]
+    recent = repo.recent_conversations(user_id, limit=8)
     recent_titles = "\n".join(f"- {c.title}" for c in recent) or "(no previous conversations)"
     words = ", ".join(w.text for w in target_words) or "(none)"
 

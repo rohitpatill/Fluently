@@ -37,10 +37,9 @@ def test_list_get_delete(client):
 
 def _seed_searchable_chat(client):
     cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
-    from app.database import SessionLocal
+    from app import repo
     from app.models import Message
 
-    db = SessionLocal()
     msgs = [
         ("user", "I watched a documentary about space telescopes"),
         ("assistant", "The James Webb one?"),
@@ -49,9 +48,7 @@ def _seed_searchable_chat(client):
         ("user", "Anyway, how is your day going?"),
     ]
     for i, (role, content) in enumerate(msgs, 1):
-        db.add(Message(conversation_id=cid, seq=i, role=role, content=content))
-    db.commit()
-    db.close()
+        repo.insert_message(Message(conversation_id=cid, seq=i, role=role, content=content))
     return cid
 
 

@@ -1,52 +1,48 @@
-"""Test fixtures. Every run uses a fresh temp SQLite DB + temp memory files —
-the real backend/data/ is never touched.
+"""Test fixtures. Every run uses a SEPARATE MongoDB database (the configured db name
+with a '_test' suffix) whose collections are wiped before each test — the real
+`fluently` database is never touched.
 
 LLM strategy is flag-based:
   - default: all LLM calls are mocked (fast, free, deterministic)
-  - live tests: `pytest -m live` (or run_tests.py --live) hit the real provider
-    configured in .env (DEFAULT_PROVIDER / DEFAULT_MODEL etc.)
+  - live tests: `pytest -m live` (or run_tests.py --live) hit the real provider in .env
 """
 
 import os
-import tempfile
 
-# Point the app at a throwaway DB/data dir BEFORE any app module is imported.
-_TMP = tempfile.mkdtemp(prefix="eng_test_")
-os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
-os.environ["DATA_DIR"] = _TMP
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Point the app at a throwaway *_test database BEFORE any app module reads settings.
+_BASE_DB = os.environ.get("MONGODB_DB", "fluently")
+os.environ["MONGODB_DB"] = f"{_BASE_DB}_test"
 
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
-from app.database import Base, SessionLocal, engine
+from app import mongo
 from app.main import app
 from app.services import chat_service, judge_service, topic_service
+
+_COLLECTIONS = ["conversations", "messages", "words", "word_events", "memory_files"]
 
 
 @pytest.fixture(autouse=True)
 def fresh_db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    # fresh memory files too
-    for f in ("identity.md", "memory.md", "persona.md"):
-        p = os.path.join(_TMP, f)
-        if os.path.exists(p):
-            os.remove(p)
+    db = mongo.get_db()
+    for c in _COLLECTIONS:
+        db[c].delete_many({})
+    mongo.ensure_indexes()
     yield
+    for c in _COLLECTIONS:
+        db[c].delete_many({})
 
 
 @pytest.fixture
 def client():
     with TestClient(app) as c:
         yield c
-
-
-@pytest.fixture
-def db():
-    session = SessionLocal()
-    yield session
-    session.close()
 
 
 # ---------- LLM mocking ----------
@@ -84,7 +80,6 @@ class FakeStructuredFactory:
     def with_structured_output(self, schema):
         if schema in self.results_by_schema:
             return FakeStructuredModel(self.results_by_schema[schema])
-        # default: empty instance of the schema
         return FakeStructuredModel(schema())
 
 

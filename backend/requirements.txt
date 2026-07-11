@@ -1,6 +1,5 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
-sqlalchemy>=2.0
 pydantic>=2.7
 pydantic-settings>=2.3
 python-dotenv>=1.0
@@ -10,6 +9,8 @@ langchain-anthropic
 langchain-google-genai
 rank-bm25>=0.2.2
 sse-starlette>=2.1
+pymongo>=4.8
+dnspython>=2.6
 
 # --- testing ---
 pytest>=8.0

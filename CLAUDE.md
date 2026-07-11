@@ -60,25 +60,27 @@ master specific vocabulary words/phrases. The user adds words; the system weaves
 naturally into conversations, judges how well the user produces them, and tracks a
 0–100 proficiency score per word with a dashboard.
 
-**Stack:** React (frontend, TBD) + FastAPI + LangChain 1.x (Python) + SQLite (local, for now — planned move to MongoDB Atlas for multi-device).
+**Stack:** React (frontend) + FastAPI + LangChain 1.x (Python) + MongoDB Atlas (cloud, via PyMongo sync). All DB access is behind a single swappable data layer (`backend/app/repo.py`). Every stored document carries a `user_id` (single-user sentinel `"default"` for now) — the app is ready for the planned Google-OAuth multi-user step, which becomes a filter, not a schema change.
 
 ## Core concepts
 
 1. **Persona** — the user assigns the system an identity at onboarding (name, relation
    e.g. best friend/mentor, personality, speaking style). Stored in `persona.md`.
-2. **Memory files** (in `backend/data/`, editable by the agent via tools):
-   - `identity.md` — timeless facts about the user (who they are, background, personality,
+2. **Memory files** (documents in the Mongo `memory_files` collection — one per (user, file);
+   NOT on-disk files anymore — editable by the agent via tools):
+   - `identity` — timeless facts about the user (who they are, background, personality,
      how they talk, recurring English mistakes) — NO dates, NO name repeated per entry (the
      user is the implied subject; only other people are named).
-   - `memory.md` — the user's life in motion: events, people, relationships, plans, deadlines.
+   - `memory` — the user's life in motion: events, people, relationships, plans, deadlines.
      Time-bound entries carry an ABSOLUTE date written by the agent inside the text itself
      (e.g. "Demo on 2026-07-17.") — never "tomorrow"/"next week".
-   - `persona.md` — what the persona remembers about ITS relationship with the user (shared
+   - `persona` — what the persona remembers about ITS relationship with the user (shared
      jokes, promises, moments), written first-person, never repeating its own name.
-   Pure free-text markdown — NO line IDs, NO machine-added stamps. The agent writes exactly
-   what should be stored; the single `memory_update(file, action)` tool edits by
-   `action='append'` (new text) or `action='edit'` (`old_string`→`new_string`, empty deletes) —
-   the same model as a normal file edit, since the whole file is always in the prompt.
+   Each doc holds the whole markdown string. Pure free-text — NO line IDs, NO machine-added
+   stamps. The agent writes exactly what should be stored; the single `memory_update(file, action)`
+   tool edits by `action='append'` (new text) or `action='edit'` (`old_string`→`new_string`,
+   empty deletes) — a read-modify-write of the whole string (read full doc → mutate → write back),
+   since the whole file is always in the prompt.
 3. **Scoring matrix** (single source of truth: `scoring_service.py`):
    perfect_unprompted +5 | perfect_prompted +3 | awkward +1 | wrong −2 | passive +0.5 |
    decay −1/week after 14 idle days (lazy, on dashboard reads) | manual = user-set delta.
@@ -152,15 +154,18 @@ ENG/
     ├── .env.example     ← copy to .env and fill API keys
     ├── pytest.ini       ← live tests deselected by default (addopts -m "not live")
     ├── run_tests.py     ← one-shot concise test report (--live adds real-LLM smoke tests)
-    ├── tests/           ← permanent suite: conftest (temp DB + mocked LLMs), test_memory,
-    │                      test_words, test_scoring, test_conversations, test_chat,
-    │                      test_dashboard, test_settings, test_live_smoke (@pytest.mark.live)
-    ├── data/            ← created at runtime: eng.db (SQLite) + the 3 memory .md files
+    ├── tests/           ← permanent suite: conftest (isolated Mongo <db>_test + mocked LLMs),
+    │                      test_memory, test_words, test_scoring, test_conversations, test_chat,
+    │                      test_dashboard, test_settings, test_mongo_connection (@live),
+    │                      test_live_smoke (@pytest.mark.live)
+    ├── import_sqlite_to_mongo.py  ← one-time SQLite→Mongo migration script (id remap; --commit/--wipe)
+    ├── data/            ← legacy pre-migration BACKUP only (old eng.db + .md files); app no longer uses it
     └── app/
-        ├── main.py              FastAPI app, CORS, routers, startup (lightweight additive migrations → create tables → memory files)
-        ├── config.py            pydantic-settings: keys, model choices, scoring constants, user_timezone
-        ├── database.py          SQLAlchemy engine/session (SQLite)
-        ├── models.py            Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id)
+        ├── main.py              FastAPI app, CORS, routers, startup (mongo ping → ensure_indexes → bootstrap memory docs)
+        ├── config.py            pydantic-settings: keys, model choices, scoring constants, user_timezone, mongodb_uri/db
+        ├── mongo.py             MongoDB connection (PyMongo), collection accessors, ensure_indexes, DEFAULT_USER_ID
+        ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here)
+        ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids, user_id): Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id)
         ├── schemas.py           all Pydantic request/response models
         ├── prompts.py           ALL prompt templates (chat system, judge, topics, enrich, onboarding-structure, title, opener)
         ├── routers/
@@ -176,9 +181,9 @@ ENG/
             ├── judge_service.py    structured-output usage judging → scoring events
             ├── scoring_service.py  scoring matrix, daily cap, lazy decay, spaced-repetition picker
             ├── topic_service.py    topic suggestions + word enrichment
-            ├── memory_service.py   free-text markdown file engine (no ids/stamps; normalize_file tolerates .md)
-            ├── search_service.py   BM25/regex search with context windows
-            └── agent_tools.py      LangChain @tool definitions (closure over db session)
+            ├── memory_service.py   free-text markdown engine over the Mongo memory_files collection (no ids/stamps; normalize_file tolerates .md)
+            ├── search_service.py   BM25/regex search (ranking in Python) over Mongo-loaded messages, context windows
+            └── agent_tools.py      LangChain @tool definitions (closure over user_id, not a db session)
 ```
 
 ## API surface
@@ -210,11 +215,17 @@ providers) → 4. `bind_tools(...).invoke()` loop (max 6 iterations) executing t
 ## Conventions & decisions
 
 - LangChain 1.x: manual message-list + `bind_tools` loop (officially documented pattern);
-  NOT `create_agent`/checkpointers — we own persistence in SQLite.
+  NOT `create_agent`/checkpointers — we own persistence in MongoDB.
+- Persistence: MongoDB Atlas via PyMongo (sync), ALL access behind `app/repo.py` (the single
+  swappable data layer — services/routers never touch pymongo). `app/mongo.py` owns the client,
+  collections, and indexes. IDs are ObjectId hex STRINGS end-to-end. Every doc has a `user_id`
+  (sentinel `"default"`); words are unique per `(user_id, text)`. The 3 memory files live in the
+  `memory_files` collection. `data/` is now just a legacy backup; the app never reads it.
 - Gemini must use explicit provider string `google_genai` (bare `gemini-*` infers Vertex).
-- Env keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` (see `.env.example`).
+- Env keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, plus `MONGODB_URI` (SRV string
+  incl. `/fluently` db name) + `MONGODB_DB` (see `.env.example`, which carries a placeholder uri).
 - LLM failures in judge/topics/enrichment/title/onboarding-structuring are swallowed — never break chat or onboarding.
-- Sync SQLAlchemy + sync routes (FastAPI threadpools them). Streaming/SSE is a planned
+- Sync PyMongo + sync routes (FastAPI threadpools them). Streaming/SSE is a planned
   upgrade (pattern documented in research: astream + StreamingResponse).
 - No summarization/compaction of history yet; no vector search yet (BM25 only) — both planned.
 - Current default models (.env): `google_genai` / `gemini-3.1-flash-lite-preview` for chat,
@@ -237,7 +248,9 @@ cd backend
   it just burns time confirming a no-op. Mixed change (e.g. new field + prompt tweak) → run it for
   the logic part. Genuinely unsure whether something counts as "logic" → default to running it.
 - Prints a per-area PASS/FAIL report and writes tests/last_report.txt. Exit code 1 on failure.
-- Tests use a fresh temp SQLite DB + temp memory files per run — real data/ is never touched.
+- Tests use an ISOLATED Mongo database `<MONGODB_DB>_test` (collections wiped per test) — the real
+  `fluently` DB is never touched. Running the suite needs network + a valid `MONGODB_URI` (even the
+  mocked-LLM run hits the real Atlas cluster's `_test` DB).
 - conftest.py mocks all LLM factories unless a test is marked `@pytest.mark.live`.
 - Every new API/feature MUST get tests in the same change: happy path, error paths, side effects.
 - The `tester` subagent (.claude/agents/tester.md) can run the suite and diagnose failures;
@@ -270,6 +283,9 @@ Behavior notes:
 cd backend
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env   (fill in at least one provider key)
+copy .env.example .env   (fill in at least one provider key + a real MONGODB_URI incl. /fluently db name)
 uvicorn app.main:app --reload --port 8000
 ```
+
+To bring pre-migration SQLite data into Mongo (optional, one-time):
+`.venv\Scripts\python import_sqlite_to_mongo.py --commit`  (reads backend/data/eng.db + the old .md files).

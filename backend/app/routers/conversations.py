@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
-from ..database import get_db
-from ..models import Conversation, Message, Word, WordEvent
+from .. import repo
+from ..models import Conversation
+from ..mongo import DEFAULT_USER_ID
 from ..schemas import (
     ConversationCreate,
     ConversationOut,
@@ -19,57 +19,51 @@ router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
 @router.get("", response_model=list[ConversationOut])
-def list_conversations(db: Session = Depends(get_db)):
-    return db.query(Conversation).order_by(Conversation.updated_at.desc()).all()
+def list_conversations():
+    return repo.list_conversations(DEFAULT_USER_ID)
 
 
 @router.post("", response_model=NewConversationResponse)
-def create_conversation(payload: ConversationCreate, db: Session = Depends(get_db)):
+def create_conversation(payload: ConversationCreate):
     """Start a new chat: pick target words (spaced repetition), optionally suggest topics.
     The first LLM call of a new chat is the topic-suggestion call, as designed."""
-    targets = scoring_service.pick_target_words(db)
+    targets = scoring_service.pick_target_words(user_id=DEFAULT_USER_ID)
     conv = Conversation(
         category=payload.category,
         title=payload.title or "New conversation",
         target_word_ids=[w.id for w in targets],
+        user_id=DEFAULT_USER_ID,
     )
-    db.add(conv)
-    db.commit()
-    db.refresh(conv)
+    repo.insert_conversation(conv)
 
     topics: list[TopicSuggestion] = []
     if payload.suggest_topics and not payload.category:
         topics = [
             TopicSuggestion(title=t.title, description=t.description, category=t.category)
-            for t in topic_service.suggest_topics(db, targets)
+            for t in topic_service.suggest_topics(targets, DEFAULT_USER_ID)
         ]
     return NewConversationResponse(conversation=conv, topics=topics)
 
 
 @router.get("/{conversation_id}", response_model=ConversationOut)
-def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conv = db.get(Conversation, conversation_id)
+def get_conversation(conversation_id: str):
+    conv = repo.get_conversation(conversation_id, DEFAULT_USER_ID)
     if not conv:
         raise HTTPException(404, "Conversation not found")
     return conv
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageOut])
-def get_messages(conversation_id: int, db: Session = Depends(get_db)):
-    conv = db.get(Conversation, conversation_id)
+def get_messages(conversation_id: str):
+    conv = repo.get_conversation(conversation_id, DEFAULT_USER_ID, with_messages=True)
     if not conv:
         raise HTTPException(404, "Conversation not found")
 
     # Attach each user message's scoring events (with resolved word text) so the
     # frontend can render persistent scoring chips that survive a page refresh.
-    events = (
-        db.query(WordEvent)
-        .filter(WordEvent.conversation_id == conversation_id, WordEvent.message_id.isnot(None))
-        .order_by(WordEvent.created_at.asc())
-        .all()
-    )
-    word_text = {w.id: w.text for w in db.query(Word.id, Word.text).all()}
-    by_message: dict[int, list[WordEventOut]] = {}
+    events = repo.events_for_conversation(conversation_id, DEFAULT_USER_ID)
+    word_text = {w.id: w.text for w in repo.list_words(DEFAULT_USER_ID)}
+    by_message: dict[str, list[WordEventOut]] = {}
     for e in events:
         by_message.setdefault(e.message_id, []).append(
             WordEventOut.model_validate(e).model_copy(update={"word_text": word_text.get(e.word_id)})
@@ -84,43 +78,40 @@ def get_messages(conversation_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{conversation_id}/category", response_model=ConversationOut)
-def set_category(conversation_id: int, category: str, db: Session = Depends(get_db)):
+def set_category(conversation_id: str, category: str):
     """Set the topic after the user picks one of the suggestions."""
-    conv = db.get(Conversation, conversation_id)
+    conv = repo.get_conversation(conversation_id, DEFAULT_USER_ID)
     if not conv:
         raise HTTPException(404, "Conversation not found")
     conv.category = category
-    db.commit()
-    db.refresh(conv)
+    repo.save_conversation(conv)
     return conv
 
 
 @router.post("/{conversation_id}/opener", response_model=MessageOut)
-def generate_opener(conversation_id: int, db: Session = Depends(get_db)):
+def generate_opener(conversation_id: str):
     """Persona opens the conversation itself (time-aware, memory-aware greeting)."""
-    conv = db.get(Conversation, conversation_id)
+    conv = repo.get_conversation(conversation_id, DEFAULT_USER_ID, with_messages=True)
     if not conv:
         raise HTTPException(404, "Conversation not found")
     if conv.messages:
         raise HTTPException(400, "Conversation already has messages")
-    return chat_service.generate_opener(db, conv)
+    return chat_service.generate_opener(conv)
 
 
 @router.delete("/{conversation_id}")
-def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conv = db.get(Conversation, conversation_id)
+def delete_conversation(conversation_id: str):
+    conv = repo.get_conversation(conversation_id, DEFAULT_USER_ID)
     if not conv:
         raise HTTPException(404, "Conversation not found")
-    db.delete(conv)
-    db.commit()
+    repo.delete_conversation(conversation_id, DEFAULT_USER_ID)
     return {"ok": True}
 
 
 @router.post("/search", response_model=list[SearchHit])
-def search_conversations(payload: SearchRequest, db: Session = Depends(get_db)):
+def search_conversations(payload: SearchRequest):
     """Same search the agent tool uses, exposed for the UI."""
     hits = search_service.search(
-        db,
         query=payload.query,
         mode=payload.mode,
         conversation_id=payload.conversation_id,
@@ -128,6 +119,7 @@ def search_conversations(payload: SearchRequest, db: Session = Depends(get_db)):
         n_after=payload.n_after,
         full_conversation=payload.full_conversation,
         max_results=payload.max_results,
+        user_id=DEFAULT_USER_ID,
     )
     return [
         SearchHit(

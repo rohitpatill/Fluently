@@ -67,6 +67,89 @@ export function FullScreenError({ title, message, onRetry }) {
   );
 }
 
+// ── Skeleton placeholders ──────────────────────────────────────────────
+// Calm, content-shaped loaders for cloud-latency data fetches. A gentle
+// gradient sweep (see .skeleton-shimmer in index.css) over the neutral
+// border-2 token — no new colors, no bouncy motion.
+
+export function Skeleton({ className = '', style }) {
+  return <div style={style} className={`skeleton-shimmer rounded-lg ${className}`} />;
+}
+
+// Softer fade/slide used when real content replaces a skeleton.
+const REVEAL = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.25, ease: [0.2, 0.8, 0.2, 1] },
+};
+export { REVEAL };
+
+// Matches WordRow: name (w-190) + score bar (flex-1) + score number + chevron.
+export function WordRowSkeleton() {
+  return (
+    <div className="border-b border-[#F1F2F6] last:border-b-0">
+      <div className="flex items-center gap-4 px-6 py-4">
+        <Skeleton className="h-4 w-[150px] shrink-0 rounded-md" />
+        <div className="flex-1 h-2 skeleton-shimmer rounded-full" />
+        <Skeleton className="h-4 w-9 rounded-md" />
+        <Skeleton className="h-3.5 w-3.5 rounded-md" />
+      </div>
+    </div>
+  );
+}
+
+// Matches a thread list item: title line + a shorter meta line.
+export function ThreadItemSkeleton() {
+  return (
+    <div className="rounded-xl px-3 py-2.5">
+      <div className="flex justify-between items-center gap-2">
+        <Skeleton className="h-3.5 w-[60%] rounded-md" />
+        <Skeleton className="h-3 w-8 rounded-md" />
+      </div>
+      <Skeleton className="h-2.5 w-[38%] mt-2 rounded-md" />
+    </div>
+  );
+}
+
+// Matches a chat bubble; alternates alignment via `mine`.
+export function MessageBubbleSkeleton({ mine = false }) {
+  if (mine) {
+    return (
+      <div className="flex justify-end">
+        <Skeleton className="h-[58px] w-[52%] max-w-[560px] rounded-[18px_4px_18px_18px]" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex gap-3 max-w-[640px]">
+      <Skeleton className="w-[30px] h-[30px] rounded-full shrink-0 mt-1" />
+      <Skeleton className="h-[64px] w-[60%] rounded-[4px_18px_18px_18px]" />
+    </div>
+  );
+}
+
+// Matches StatCard: small label line + a larger value line.
+export function StatCardSkeleton() {
+  return (
+    <div className="rounded-2xl px-5 py-4 border bg-surface border-border">
+      <Skeleton className="h-2.5 w-[55%] rounded-md" />
+      <Skeleton className="h-6 w-[45%] mt-2.5 rounded-md" />
+    </div>
+  );
+}
+
+// Matches the memory markdown block: a few lines of varying width.
+export function MemoryEditorSkeleton() {
+  const widths = ['85%', '70%', '92%', '55%', '78%', '40%'];
+  return (
+    <div className="flex-1 flex flex-col gap-3.5 px-6 py-5">
+      {widths.map((w, i) => (
+        <Skeleton key={i} className="h-3.5 rounded-md" style={{ width: w }} />
+      ))}
+    </div>
+  );
+}
+
 export function ScoreBar({ score, slipping }) {
   return (
     <div className="flex-1 h-2 bg-[#EFF1F5] rounded-full overflow-hidden">

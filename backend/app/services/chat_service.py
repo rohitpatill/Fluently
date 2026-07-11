@@ -3,8 +3,8 @@
 import json
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from sqlalchemy.orm import Session
 
+from .. import repo
 from ..models import Conversation, Message
 from ..prompts import OPENER_INSTRUCTION, TITLE_SYSTEM
 from . import prompt_builder
@@ -40,7 +40,6 @@ def _next_seq(conversation: Conversation) -> int:
 
 
 def run_agent_turn(
-    db: Session,
     conversation: Conversation,
     user_content: str | None,
     provider: str | None = None,
@@ -50,22 +49,24 @@ def run_agent_turn(
     """One full turn: optional user message -> agent loop with tools -> stored assistant message.
     If user_content is None, the model opens the conversation itself (opener flow)."""
 
-    user_msg = None
+    # ensure we have the current message list to compute seq + rebuild history
+    repo.load_messages(conversation)
+
     if user_content is not None:
         user_msg = Message(
-            conversation_id=conversation.id, seq=_next_seq(conversation), role="user", content=user_content
+            conversation_id=conversation.id, seq=_next_seq(conversation),
+            role="user", content=user_content, user_id=conversation.user_id,
         )
-        db.add(user_msg)
-        db.commit()
-        db.refresh(conversation)
+        repo.insert_message(user_msg)
+        conversation.messages.append(user_msg)
 
-    system = prompt_builder.build_system_prompt(db, conversation)
+    system = prompt_builder.build_system_prompt(conversation)
     if extra_instruction:
         system += "\n\n" + extra_instruction
 
     messages: list = [SystemMessage(content=system)] + _history_messages(conversation)
 
-    tools = build_tools(db, current_conversation_id=conversation.id)
+    tools = build_tools(current_conversation_id=conversation.id, user_id=conversation.user_id)
     tool_map = {t.name: t for t in tools}
     llm = get_chat_model(provider, model_name).bind_tools(tools)
 
@@ -98,17 +99,18 @@ def run_agent_turn(
         role="assistant",
         content=content,
         tool_calls=executed_tool_calls,
+        user_id=conversation.user_id,
     )
-    db.add(assistant_msg)
-    db.commit()
+    repo.insert_message(assistant_msg)
+    conversation.messages.append(assistant_msg)
+    repo.touch_conversation(conversation.id)
 
-    _maybe_set_title(db, conversation)
-    db.refresh(assistant_msg)
+    _maybe_set_title(conversation)
     return assistant_msg
 
 
-def generate_opener(db: Session, conversation: Conversation) -> Message:
-    return run_agent_turn(db, conversation, user_content=None, extra_instruction=OPENER_INSTRUCTION)
+def generate_opener(conversation: Conversation) -> Message:
+    return run_agent_turn(conversation, user_content=None, extra_instruction=OPENER_INSTRUCTION)
 
 
 def _flatten_content(blocks) -> str:
@@ -121,9 +123,8 @@ def _flatten_content(blocks) -> str:
     return "".join(parts)
 
 
-def _maybe_set_title(db: Session, conversation: Conversation) -> None:
+def _maybe_set_title(conversation: Conversation) -> None:
     """Auto-title after the first exchange."""
-    db.refresh(conversation)
     if conversation.title != "New conversation" or len(conversation.messages) < 2:
         return
     try:
@@ -133,6 +134,6 @@ def _maybe_set_title(db: Session, conversation: Conversation) -> None:
         title = raw if isinstance(raw, str) else _flatten_content(raw)  # Gemini returns block lists
         if title.strip():
             conversation.title = title.strip().strip('"')[:200]
-            db.commit()
+            repo.save_conversation(conversation)
     except Exception:
         pass  # a failed title must never break the chat

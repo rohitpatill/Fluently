@@ -3,16 +3,15 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy.orm import Session
-
+from .. import repo
 from ..config import settings
-from ..models import Conversation, Word
+from ..models import Conversation
 from ..prompts import CHAT_SYSTEM_TEMPLATE, PERSONA_FALLBACK
 from . import memory_service
 
 
-def _persona_block() -> tuple[str, str]:
-    raw = memory_service.read_file("persona").strip()
+def _persona_block(user_id: str) -> tuple[str, str]:
+    raw = memory_service.read_file("persona", user_id).strip()
     name = "Alex"
     for line in raw.splitlines():
         if line.lower().startswith("name:"):
@@ -72,10 +71,10 @@ def _time_block() -> str:
     )
 
 
-def _target_words_block(db: Session, conversation: Conversation) -> str:
+def _target_words_block(conversation: Conversation) -> str:
     if not conversation.target_word_ids:
         return "(no target words yet — the user hasn't added vocabulary, just have a great conversation)"
-    words = db.query(Word).filter(Word.id.in_(conversation.target_word_ids)).all()
+    words = repo.get_words_by_ids(conversation.target_word_ids, conversation.user_id)
     lines = []
     for w in words:
         lines.append(
@@ -86,11 +85,11 @@ def _target_words_block(db: Session, conversation: Conversation) -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(db: Session, conversation: Conversation) -> str:
-    persona_block, persona_name = _persona_block()
+def build_system_prompt(conversation: Conversation) -> str:
+    persona_block, persona_name = _persona_block(conversation.user_id)
 
-    identity = memory_service.read_file("identity").strip() or "(nothing recorded yet)"
-    memory = memory_service.read_file("memory").strip() or "(nothing recorded yet)"
+    identity = memory_service.read_file("identity", conversation.user_id).strip() or "(nothing recorded yet)"
+    memory = memory_service.read_file("memory", conversation.user_id).strip() or "(nothing recorded yet)"
 
     category_block = (
         f"This conversation's chosen topic/category: {conversation.category}. Steer the talk around it naturally."
@@ -102,7 +101,7 @@ def build_system_prompt(db: Session, conversation: Conversation) -> str:
         persona_block=persona_block,
         identity_block=identity,
         memory_block=memory,
-        target_words_block=_target_words_block(db, conversation),
+        target_words_block=_target_words_block(conversation),
         time_block=_time_block(),
         category_block=category_block,
         persona_name=persona_name,

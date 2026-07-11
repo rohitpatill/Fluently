@@ -2,9 +2,10 @@
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 
-from ..models import Conversation, Message, Word, WordEvent
+from .. import repo
+from ..models import WordEvent
+from ..mongo import DEFAULT_USER_ID
 from ..prompts import JUDGE_SYSTEM
 from .llm_service import get_judge_model
 from .scoring_service import apply_event
@@ -24,15 +25,16 @@ class JudgeResult(BaseModel):
     judgements: list[UsageJudgement] = Field(default_factory=list)
 
 
-def judge_user_message(db: Session, conversation_id: int, user_message_id: int) -> list[WordEvent]:
-    conversation = db.get(Conversation, conversation_id)
-    user_msg = db.get(Message, user_message_id)
+def judge_user_message(conversation_id: str, user_message_id: str,
+                        user_id: str = DEFAULT_USER_ID) -> list[WordEvent]:
+    conversation = repo.get_conversation(conversation_id, user_id, with_messages=True)
+    user_msg = repo.get_message(user_message_id, user_id)
     if conversation is None or user_msg is None:
         return []
 
     # judge against ALL tracked words, not just conversation targets — the user may
     # spontaneously use any practiced word, and it must count the same everywhere
-    words = db.query(Word).all()
+    words = repo.list_words(user_id)
     if not words:
         return []
     word_map = {w.text.lower(): w for w in words}
@@ -61,7 +63,6 @@ def judge_user_message(db: Session, conversation_id: int, user_message_id: int) 
             continue
         events.append(
             apply_event(
-                db,
                 word,
                 j.classification,
                 judge_notes=j.suggestion,

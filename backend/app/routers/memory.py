@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException
 
 from ..config import settings
+from ..mongo import DEFAULT_USER_ID
 from ..schemas import (
     MemoryAppend,
     MemoryEdit,
@@ -73,7 +74,7 @@ def set_persona(form: PersonaForm):
 
 
 def _persona_name() -> str:
-    for line in memory_service.read_file("persona").splitlines():
+    for line in memory_service.read_file("persona", DEFAULT_USER_ID).splitlines():
         if line.lower().startswith("name:"):
             return line.split(":", 1)[1].strip() or "your companion"
     return "your companion"

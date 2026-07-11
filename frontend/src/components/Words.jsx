@@ -6,7 +6,7 @@ import { ChevronDown, Loader2, NotebookPen, Pencil, Plus, Trophy } from 'lucide-
 
 import * as api from '../api';
 import { useDashboardStats, useWordEvents, useWords } from '../hooks/useApi';
-import { ScoreBar, Spinner } from './Shared';
+import { ScoreBar, Spinner, StatCardSkeleton, WordRowSkeleton, REVEAL } from './Shared';
 import { relativeTime } from '../utils';
 
 function StatCard({ label, value, accent, warm }) {
@@ -299,14 +299,21 @@ export default function Words() {
         </div>
 
         <div className="grid grid-cols-4 gap-3.5 mt-6">
-          <StatCard label="Mastered" value={s ? s.mastered : '—'} />
-          <StatCard label="Average score" value={s ? s.average_score : '—'} accent />
-          <StatCard label="Strongest" value={s?.top_words?.[0]?.text || '—'} />
-          <StatCard label="Slipping" value={s?.slipping_words?.length ? s.slipping_words.map((w) => w.text).join(', ') : 'nothing ✦'} warm />
+          {stats.isLoading ? (
+            Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+          ) : (
+            <>
+              <StatCard label="Mastered" value={s ? s.mastered : '—'} />
+              <StatCard label="Average score" value={s ? s.average_score : '—'} accent />
+              <StatCard label="Strongest" value={s?.top_words?.[0]?.text || '—'} />
+              <StatCard label="Slipping" value={s?.slipping_words?.length ? s.slipping_words.map((w) => w.text).join(', ') : 'nothing ✦'} warm />
+            </>
+          )}
         </div>
 
         <div className="mt-6 mb-10 bg-surface border border-border rounded-[18px] overflow-hidden">
-          {words.isLoading && <div className="flex justify-center py-14"><Spinner /></div>}
+          {words.isLoading &&
+            Array.from({ length: 6 }).map((_, i) => <WordRowSkeleton key={i} />)}
           {!words.isLoading && sorted.length === 0 && (
             <div className="text-center py-14 px-8">
               <p className="m-0 text-[15px] font-semibold">No words yet</p>
@@ -315,9 +322,13 @@ export default function Words() {
               </p>
             </div>
           )}
-          {sorted.map((w) => (
-            <WordRow key={w.id} word={w} expanded={expandedId === w.id} onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)} />
-          ))}
+          {!words.isLoading && sorted.length > 0 && (
+            <motion.div {...REVEAL}>
+              {sorted.map((w) => (
+                <WordRow key={w.id} word={w} expanded={expandedId === w.id} onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)} />
+              ))}
+            </motion.div>
+          )}
         </div>
       </div>
     </div>

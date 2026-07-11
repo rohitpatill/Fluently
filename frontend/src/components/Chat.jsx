@@ -8,7 +8,7 @@ import { ChevronDown, Plus, Search, Send, Sparkles, Trash2, Wrench } from 'lucid
 import * as api from '../api';
 import { useConversations, useMessages } from '../hooks/useApi';
 import { useDevMode } from '../hooks/useDevMode';
-import { PersonaAvatar, Spinner } from './Shared';
+import { PersonaAvatar, Spinner, ThreadItemSkeleton, MessageBubbleSkeleton } from './Shared';
 import { formatThreadTime, nowClockLabel } from '../utils';
 
 const CHIP_STYLES = {
@@ -312,7 +312,8 @@ export default function Chat({ personaName }) {
           />
         </div>
         <div className="flex-1 overflow-y-auto px-3 pb-5 pt-1.5 flex flex-col gap-1">
-          {conversations.isLoading && <div className="flex justify-center pt-8"><Spinner /></div>}
+          {conversations.isLoading &&
+            Array.from({ length: 4 }).map((_, i) => <ThreadItemSkeleton key={i} />)}
           {filteredThreads.map((t) => (
             <div
               key={t.id}
@@ -420,7 +421,8 @@ export default function Chat({ personaName }) {
         ) : (
           /* messages */
           <div ref={scrollRef} className="flex-1 px-[8%] py-7 flex flex-col gap-5 overflow-y-auto">
-            {messages.isLoading && <div className="flex justify-center pt-10"><Spinner /></div>}
+            {messages.isLoading &&
+              [false, true, false, true].map((mine, i) => <MessageBubbleSkeleton key={i} mine={mine} />)}
             {msgs.map((m) =>
               m.role === 'assistant' ? (
                 <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 max-w-[640px]">

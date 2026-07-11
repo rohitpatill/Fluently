@@ -17,7 +17,9 @@ class Settings(BaseSettings):
     utility_provider: str = "anthropic"
     utility_model: str = "claude-haiku-4-5-20251001"
 
-    database_url: str = "sqlite:///./data/eng.db"
+    # MongoDB (Atlas) — the app's primary datastore.
+    mongodb_uri: str = ""
+    mongodb_db: str = "fluently"
     data_dir: str = "./data"
 
     # User's timezone — all temporal reasoning in the prompt is computed in this zone.

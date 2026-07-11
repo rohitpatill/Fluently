@@ -7,9 +7,9 @@ message record (transparency), but are NOT injected as visible chat messages.
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 
-from ..models import Word
+from .. import repo
+from ..mongo import DEFAULT_USER_ID
 from . import memory_service, scoring_service, search_service
 
 
@@ -60,12 +60,12 @@ class SearchArgs(BaseModel):
 
 
 class AdjustScoreArgs(BaseModel):
-    word_id: int = Field(description="The word's id (shown next to each target word in your context)")
+    word_id: str = Field(description="The word's id (shown next to each target word in your context)")
     delta: float = Field(description="Score change, e.g. +3 or -5. Positive for notably good use, negative to flag for more practice")
     reason: str = Field(description="One short sentence: why you adjusted it")
 
 
-def build_tools(db: Session, current_conversation_id: int | None = None):
+def build_tools(current_conversation_id: str | None = None, user_id: str = DEFAULT_USER_ID):
     @tool(args_schema=MemoryUpdateArgs)
     def memory_update(
         file: str,
@@ -86,11 +86,11 @@ def build_tools(db: Session, current_conversation_id: int | None = None):
         if act == "append":
             if not text.strip():
                 return "append requires non-empty `text`."
-            memory_service.append(file, text)
+            memory_service.append(file, text, user_id)
             return f"Saved a new memory to {file}.md."
         if act == "edit":
             try:
-                memory_service.edit(file, old_string, new_string, replace_all)
+                memory_service.edit(file, old_string, new_string, replace_all, user_id)
             except KeyError:
                 return (
                     f"Could not find that text in {file}.md. Copy `old_string` exactly as it "
@@ -116,7 +116,6 @@ def build_tools(db: Session, current_conversation_id: int | None = None):
     ) -> str:
         """Search all PAST conversations with the user for relevant context. Use when the user references something discussed before, or when past context would improve your reply. Returns matched messages with surrounding context."""
         hits = search_service.search(
-            db,
             query=query,
             mode=mode,
             n_before=n_before,
@@ -124,17 +123,18 @@ def build_tools(db: Session, current_conversation_id: int | None = None):
             full_conversation=full_conversation,
             max_results=max_results,
             exclude_conversation_id=current_conversation_id,
+            user_id=user_id,
         )
         return search_service.format_hits_for_llm(hits)
 
     @tool(args_schema=AdjustScoreArgs)
-    def adjust_word_score(word_id: int, delta: float, reason: str) -> str:
+    def adjust_word_score(word_id: str, delta: float, reason: str) -> str:
         """Adjust a tracked word's proficiency score (0-100). Use sparingly — automatic judging already scores normal usage. Reach for this only for exceptional cases: the user explicitly asks to practice a word more (negative delta), or demonstrates mastery the automatic judge can't see."""
-        word = db.get(Word, word_id)
+        word = repo.get_word(word_id, user_id)
         if word is None:
             return f"No word with id {word_id}."
         event = scoring_service.apply_event(
-            db, word, "manual", judge_notes=f"[agent] {reason}",
+            word, "manual", judge_notes=f"[agent] {reason}",
             conversation_id=current_conversation_id, manual_delta=delta,
         )
         return f'"{word.text}" score changed by {event.delta:+g} to {event.score_after:g}/100.'

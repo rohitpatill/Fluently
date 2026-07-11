@@ -38,6 +38,7 @@
   --animate-dot-pulse: dotPulse 1.2s infinite;
   --animate-fade-in: fadeIn .4s ease-out both;
   --animate-shimmer: shimmer 1.6s ease-out;
+  --animate-skeleton: skeletonSweep 1.5s ease-in-out infinite;
 
   @keyframes msgIn {
     from { opacity: 0; transform: translateY(8px); }
@@ -60,6 +61,22 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
+  @keyframes skeletonSweep {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* Calm shimmer sweep for skeleton placeholders — uses design-system neutrals. */
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-border-2) 30%,
+    #F4F5F8 50%,
+    var(--color-border-2) 70%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-skeleton);
 }
 
 * { box-sizing: border-box; }
