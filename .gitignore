@@ -1,0 +1,27 @@
+# --- backend (Python) ---
+backend/.venv/
+backend/data/
+backend/.env
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+*.log
+backend/tests/last_report.txt
+
+# --- frontend (Node) ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# --- editors / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.GIT_INSTRUCTIONS.md

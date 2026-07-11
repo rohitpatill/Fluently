@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Schibsted Grotesk Variable', 'Schibsted Grotesk', sans-serif;
+  --font-serif: 'Newsreader Variable', 'Newsreader', serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
+
+  --color-accent: #4B5DE4;
+  --color-accent-hover: #3A49C9;
+  --color-accent-soft: #EEF0FE;
+  --color-accent-soft-border: #D9DDFB;
+  --color-bg: #F7F8FA;
+  --color-surface: #ffffff;
+  --color-border: #ECEEF3;
+  --color-border-2: #E7E9EF;
+  --color-muted: #8A8F9E;
+  --color-muted-2: #A3A8B5;
+  --color-text: #1A1D27;
+  --color-text-2: #2A2E3A;
+  --color-text-3: #4A4F5E;
+  --color-amber-bg: #FFF9F0;
+  --color-amber-border: #F4E3C2;
+  --color-amber-text: #A9731C;
+  --color-amber-text-2: #C2954E;
+  --color-green: #3FBF77;
+  --color-red: #C0564F;
+
+  --radius-xl2: 18px;
+  --radius-xl3: 22px;
+
+  --shadow-soft: 0 6px 18px -12px rgba(26, 29, 39, .15);
+  --shadow-card: 0 4px 14px -10px rgba(26, 29, 39, .15);
+  --shadow-accent: 0 8px 20px -8px rgba(75, 93, 228, .55);
+  --shadow-accent-lg: 0 14px 34px -14px rgba(75, 93, 228, .6);
+
+  --animate-msg-in: msgIn .28s ease-out both;
+  --animate-chip-pop: chipPop .3s ease-out both;
+  --animate-dot-pulse: dotPulse 1.2s infinite;
+  --animate-fade-in: fadeIn .4s ease-out both;
+  --animate-shimmer: shimmer 1.6s ease-out;
+
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes chipPop {
+    0% { opacity: 0; transform: scale(.85); }
+    70% { transform: scale(1.04); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes dotPulse {
+    0%, 60%, 100% { opacity: .35; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+  }
+  @keyframes shimmer {
+    from { background-position: -200px 0; }
+    to { background-position: 400px 0; }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+
+body {
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { color: var(--color-accent-hover); }
+::selection { background: rgba(75, 93, 228, .18); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #DDE0EA; border-radius: 99px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.font-serif-italic { font-family: var(--font-serif); font-style: italic; }
