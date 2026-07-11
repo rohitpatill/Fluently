@@ -9,6 +9,8 @@ backend/**/__pycache__/
 backend/tests/last_report.txt
 
 # --- frontend (Node) ---
+frontend/.env
+frontend/.env.*
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/

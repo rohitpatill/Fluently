@@ -37,13 +37,18 @@ def _set_state_cookie(response: Response, value: str) -> None:
         max_age=auth_service.STATE_MAX_AGE,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         path=_STATE_COOKIE_PATH,
     )
 
 
 def _clear_state_cookie(response: Response) -> None:
-    response.delete_cookie(_STATE_COOKIE, path=_STATE_COOKIE_PATH)
+    response.delete_cookie(
+        _STATE_COOKIE,
+        path=_STATE_COOKIE_PATH,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -53,7 +58,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         max_age=auth_service.session_max_age_seconds(),
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         path="/",
     )
 
@@ -129,7 +134,12 @@ def me(user: User = Depends(get_current_user_obj)):
 @router.post("/logout")
 def logout(response: Response):
     """Clear the session cookie. Idempotent — safe to call when already logged out."""
-    response.delete_cookie(settings.session_cookie_name, path="/")
+    response.delete_cookie(
+        settings.session_cookie_name,
+        path="/",
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
     return {"ok": True}
 
 

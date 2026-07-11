@@ -53,6 +53,26 @@ class Settings(BaseSettings):
         """Cookies get the Secure flag automatically once the backend is served over https."""
         return self.oauth_redirect_base.lower().startswith("https")
 
+    @property
+    def cross_site(self) -> bool:
+        """True when the frontend and backend are on different sites (registrable domains).
+        In that case the session cookie must be SameSite=None + Secure to survive at all."""
+        def host(url: str) -> str:
+            u = url.lower().split("://", 1)[-1]
+            return u.split("/", 1)[0].split(":", 1)[0]
+
+        be, fe = host(self.oauth_redirect_base), host(self.frontend_url)
+        if be == fe:
+            return False
+        # Compare the last two labels (registrable-ish): api.x.com vs app.x.com -> same site.
+        return be.split(".")[-2:] != fe.split(".")[-2:]
+
+    @property
+    def cookie_samesite(self) -> str:
+        """'none' for cross-site deployments (SPA and API on different domains), else 'lax'.
+        Browsers only accept SameSite=None when the cookie is also Secure (https)."""
+        return "none" if (self.cross_site and self.cookie_secure) else "lax"
+
     # User's timezone — all temporal reasoning in the prompt is computed in this zone.
     user_timezone: str = "Asia/Kolkata"
 
