@@ -10,8 +10,8 @@ const NAV = [
 
 export default function Rail({ view, setView, personaName, userName, me }) {
   return (
-    <div className="w-[68px] bg-[#FDFDFE] border-r border-border flex flex-col items-center pt-[18px] pb-4 gap-1.5 shrink-0">
-      <div className="mb-[18px]">
+    <div className="fixed inset-x-0 bottom-0 z-40 h-[76px] bg-[#FDFDFE]/95 border-t border-border flex items-center justify-around px-3 shadow-[0_-10px_28px_-24px_rgba(26,29,39,.35)] backdrop-blur md:static md:w-[68px] md:h-auto md:border-t-0 md:border-r md:flex-col md:justify-start md:pt-[18px] md:pb-4 md:gap-1.5 md:shadow-none md:backdrop-blur-none shrink-0">
+      <div className="hidden md:block md:mb-[18px]">
         <PersonaAvatar name={personaName} size="sm" />
       </div>
       {NAV.map(({ key, label, Icon }) => (
@@ -19,25 +19,27 @@ export default function Rail({ view, setView, personaName, userName, me }) {
           key={key}
           title={label}
           onClick={() => setView(key)}
-          className={`w-11 h-11 rounded-[14px] border-none cursor-pointer flex items-center justify-center transition-all
+          className={`w-12 h-12 md:w-11 md:h-11 rounded-[14px] border-none cursor-pointer flex flex-col md:flex-row items-center justify-center gap-0.5 transition-all
             ${view === key ? 'bg-accent-soft text-accent' : 'bg-transparent text-muted hover:bg-[#F1F2F6]'}`}
         >
           <Icon size={19} strokeWidth={2} />
+          <span className="text-[10px] leading-none md:hidden">{label}</span>
         </button>
       ))}
-      <div className="flex-1" />
+      <div className="hidden md:block md:flex-1" />
       <button
         title="Settings"
         onClick={() => setView('settings')}
-        className={`w-11 h-11 rounded-[14px] border-none cursor-pointer flex items-center justify-center transition-all mb-1.5
+        className={`w-12 h-12 md:w-11 md:h-11 rounded-[14px] border-none cursor-pointer flex flex-col md:flex-row items-center justify-center gap-0.5 transition-all md:mb-1.5
           ${view === 'settings' ? 'bg-accent-soft text-accent' : 'bg-transparent text-muted hover:bg-[#F1F2F6]'}`}
       >
         <Settings size={19} strokeWidth={2} />
+        <span className="text-[10px] leading-none md:hidden">Settings</span>
       </button>
       <button
         title={`${userName || me?.name || 'You'} — open Settings`}
         onClick={() => setView('settings')}
-        className="w-[34px] h-[34px] rounded-full border-none p-0 cursor-pointer overflow-hidden bg-border-2 flex items-center justify-center text-[13px] font-semibold text-text-3"
+        className="hidden md:flex w-[34px] h-[34px] rounded-full border-none p-0 cursor-pointer overflow-hidden bg-border-2 items-center justify-center text-[13px] font-semibold text-text-3"
       >
         {me?.picture ? (
           <img src={me.picture} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />

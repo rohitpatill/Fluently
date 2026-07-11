@@ -157,9 +157,9 @@ ENG/
 │       └── components/
 │           ├── Login.jsx       auth gate — single "Continue with Google" screen (Fluently-styled)
 │           ├── Onboarding.jsx  2-step persona + user form
-│           ├── Rail.jsx        left nav — 3 main tabs (Chat, Words, Memory) + Settings gear + Google-avatar (opens Settings)
-│           ├── Chat.jsx        threads sidebar, topic cards, opener, messages (markdown), scoring chips (persist + expandable), dev-mode tool-call viewer, composer
-│           ├── Words.jsx       stats cards, add+enrich, score bars, expandable detail: personal note (top) + meaning + collapsible event history
+│           ├── Rail.jsx        responsive nav — desktop left rail; mobile bottom bar; 3 main tabs + Settings
+│           ├── Chat.jsx        desktop threads sidebar / mobile slide-out conversations drawer, topic cards, opener, messages, scoring chips, dev tools, composer
+│           ├── Words.jsx       stats cards, add+enrich, score bars, responsive rows, expandable detail with mobile-visible note edit
 │           ├── Memory.jsx      3 RAW markdown editors (identity/memory/persona) with Save → PUT .../raw
 │           ├── SettingsView.jsx Account profile (Google name/email/picture) + Log out, Developer-mode toggle, data-management hard-delete cards
 │           └── Shared.jsx      PersonaAvatar, Spinner, loaders, error screen, ScoreBar
@@ -301,7 +301,7 @@ Behavior notes:
   full-width meaning below, and event history as a collapsible strip at the bottom.
 - After each chat turn the app invalidates words/dashboard/memory queries (agent may have changed them).
 - Thread delete + word remove use inline two-step confirm (click → "sure?" for 2.5s), no modals.
-- Chat sends invalidate conversations (auto-title updates in sidebar).
+- Chat sends invalidate conversations (auto-title updates in sidebar/drawer).
 - Memory tab defaults to rendered View (markdown) on open/tab-switch; Edit shows the raw textarea;
   Save returns to View. Onboarding's free-text "about you" box is LLM-structured server-side, not
   pasted raw — shows a brief "getting to know you" overlay while that call runs.

@@ -54,7 +54,7 @@ function EventHistory({ wordId, expanded }) {
               ) : (
                 <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-2">
                   {list.map((ev) => (
-                    <div key={ev.id} className="flex gap-2.5 text-[12.5px] items-baseline">
+                    <div key={ev.id} className="flex flex-wrap gap-x-2.5 gap-y-1 text-[12.5px] items-baseline">
                       <span className="text-muted-2 w-12 shrink-0">{relativeTime(ev.created_at)}</span>
                       <span className={`font-mono font-semibold shrink-0 ${ev.delta > 0 ? 'text-[#1E7D4B]' : ev.delta < 0 ? 'text-red' : 'text-muted-2'}`}>
                         {ev.delta > 0 ? `+${ev.delta}` : ev.delta}
@@ -136,7 +136,7 @@ function PersonalNote({ word }) {
           <button
             onClick={startEdit}
             title="Edit note"
-            className="text-muted-2 hover:text-accent bg-transparent border-none cursor-pointer opacity-0 group-hover/note:opacity-100 transition-opacity"
+            className="text-muted-2 hover:text-accent bg-transparent border-none cursor-pointer opacity-100 sm:opacity-0 sm:group-hover/note:opacity-100 transition-opacity"
           >
             <Pencil size={13} />
           </button>
@@ -182,15 +182,17 @@ function WordRow({ word, expanded, onToggle }) {
 
   return (
     <div className="border-b border-[#F1F2F6] last:border-b-0">
-      <div onClick={onToggle} className="flex items-center gap-4 px-6 py-4 cursor-pointer hover:bg-[#FBFBFC] transition-colors">
-        <span className="text-[15px] font-semibold w-[190px] shrink-0 flex items-center gap-2 truncate">
-          {word.text}
+      <div onClick={onToggle} className="grid grid-cols-[1fr_auto] sm:flex sm:items-center gap-3 sm:gap-4 px-4 sm:px-6 py-4 cursor-pointer hover:bg-[#FBFBFC] transition-colors">
+        <span className="text-[15px] font-semibold sm:w-[190px] sm:shrink-0 flex items-center gap-2 min-w-0">
+          <span className="truncate">{word.text}</span>
           {word.kind === 'phrase' && <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-2 bg-[#F1F2F6] rounded-full px-2 py-0.5">phrase</span>}
           {mastered && <Trophy size={13} className="text-[#D9A62E] shrink-0" />}
         </span>
-        <ScoreBar score={word.score} slipping={false} />
-        <span className="font-mono text-sm font-semibold w-9 text-right">{Math.round(word.score)}</span>
-        <motion.span animate={{ rotate: expanded ? 180 : 0 }} className="text-[#B4B8C4]"><ChevronDown size={15} /></motion.span>
+        <div className="col-span-2 sm:col-span-1 sm:flex-1">
+          <ScoreBar score={word.score} slipping={false} />
+        </div>
+        <span className="font-mono text-sm font-semibold w-9 text-right row-start-1 col-start-2 sm:row-auto sm:col-auto">{Math.round(word.score)}</span>
+        <motion.span animate={{ rotate: expanded ? 180 : 0 }} className="hidden sm:block text-[#B4B8C4]"><ChevronDown size={15} /></motion.span>
       </div>
       <AnimatePresence>
         {expanded && (
@@ -201,7 +203,7 @@ function WordRow({ word, expanded, onToggle }) {
             transition={{ duration: 0.22 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-col gap-3 px-6 pb-5 pt-1 max-w-[720px]">
+            <div className="flex flex-col gap-3 px-4 sm:px-6 pb-5 pt-1 max-w-[720px]">
               <PersonalNote word={word} />
               <p className="m-0 text-[13.5px] leading-relaxed text-text-3">
                 <strong>Meaning</strong> — {word.meaning || 'No description yet.'}
@@ -217,7 +219,7 @@ function WordRow({ word, expanded, onToggle }) {
                   ))}
                 </div>
               )}
-              <div className="flex items-center gap-2.5 mt-1">
+              <div className="flex flex-wrap items-center gap-2.5 mt-1">
                 <span className="text-xs text-muted-2">Practice more:</span>
                 <button
                   onClick={() => lower.mutate()}
@@ -271,7 +273,7 @@ export default function Words() {
   const s = stats.data;
 
   return (
-    <div className="h-full overflow-y-auto px-14 py-9">
+    <div className="h-full overflow-y-auto px-4 sm:px-7 lg:px-14 py-6 md:py-9">
       <div className="max-w-[980px] mx-auto">
         <div className="flex justify-between items-end flex-wrap gap-4">
           <div>
@@ -280,25 +282,25 @@ export default function Words() {
               {sorted.length ? `${sorted.length} tracked · every conversation makes them stronger` : 'Add the words you want to own.'}
             </p>
           </div>
-          <div className="flex gap-2.5">
+          <div className="flex w-full sm:w-auto gap-2.5">
             <input
               value={newWord}
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && newWord.trim() && !add.isPending && add.mutate(newWord.trim())}
               placeholder="Add a word or phrase…"
-              className="bg-surface border border-border-2 rounded-xl px-4 py-2.5 text-[13.5px] outline-none w-[230px] text-text focus:border-accent-soft-border transition-colors"
+              className="bg-surface border border-border-2 rounded-xl px-4 py-2.5 text-[13.5px] outline-none min-w-0 flex-1 sm:w-[230px] text-text focus:border-accent-soft-border transition-colors"
             />
             <button
               onClick={() => newWord.trim() && add.mutate(newWord.trim())}
               disabled={add.isPending || !newWord.trim()}
-              className="bg-accent hover:bg-accent-hover disabled:opacity-55 text-white border-none rounded-xl px-4.5 py-2.5 text-[13.5px] font-semibold shadow-accent cursor-pointer flex items-center gap-1.5 transition-colors"
+              className="bg-accent hover:bg-accent-hover disabled:opacity-55 text-white border-none rounded-xl px-4 sm:px-4.5 py-2.5 text-[13.5px] font-semibold shadow-accent cursor-pointer flex items-center justify-center gap-1.5 transition-colors shrink-0"
             >
               {add.isPending ? (<><Loader2 size={14} className="animate-spin" /> Enriching…</>) : (<><Plus size={14} /> Add</>)}
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-3.5 mt-6">
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-6">
           {stats.isLoading ? (
             Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : (

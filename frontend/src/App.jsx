@@ -61,9 +61,9 @@ export default function App() {
   const userName = parseIdentityName(identity.data?.raw) || me.data.name;
 
   return (
-    <div className="h-screen flex animate-fade-in">
+    <div className="h-dvh min-h-0 flex flex-col md:flex-row animate-fade-in">
       <Rail view={view} setView={setView} personaName={personaName} userName={userName} me={me.data} />
-      <div className="flex-1 min-w-0 h-full">
+      <div className="flex-1 min-w-0 min-h-0 h-full pb-[76px] md:pb-0">
         <AnimatePresence mode="wait">
           <motion.div
             key={view}

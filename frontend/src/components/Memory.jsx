@@ -70,19 +70,19 @@ export default function Memory({ personaName }) {
   const lineCount = file.data ? file.data.lines.length : 0;
 
   return (
-    <div className="h-full overflow-y-auto px-14 py-9">
-      <div className="max-w-[920px] mx-auto flex flex-col h-full">
-        <h2 className="m-0 text-[28px] font-bold tracking-tight">What {personaName} remembers</h2>
+    <div className="h-full overflow-y-auto px-4 sm:px-7 lg:px-14 py-6 md:py-9">
+      <div className="max-w-[920px] mx-auto flex flex-col min-h-full">
+        <h2 className="m-0 text-[24px] sm:text-[28px] font-bold tracking-tight">What {personaName} remembers</h2>
         <p className="mt-1.5 mb-0 text-sm text-muted">
           Three living notebooks, written by {personaName} as you talk. Edit anything — the change takes effect on the very next message.
         </p>
 
-        <div className="flex gap-2.5 mt-6">
+        <div className="flex gap-2.5 mt-6 overflow-x-auto pb-1">
           {TABS(personaName).map((t) => (
             <button
               key={t.key}
               onClick={() => switchTab(t.key)}
-              className={`rounded-full px-4.5 py-2 text-[13.5px] cursor-pointer transition-colors border ${
+              className={`rounded-full px-4.5 py-2 text-[13.5px] cursor-pointer transition-colors border whitespace-nowrap ${
                 tab === t.key
                   ? 'bg-accent text-white font-semibold border-transparent shadow-accent'
                   : 'bg-surface text-text-3 border-border-2 hover:bg-[#F1F2F6]'
@@ -99,12 +99,12 @@ export default function Memory({ personaName }) {
           animate={{ opacity: 1, y: 0 }}
           className="mt-5 mb-8 flex-1 min-h-[420px] flex flex-col bg-surface border border-border rounded-[18px] overflow-hidden shadow-soft"
         >
-          <div className="flex items-center justify-between px-5 py-3 border-b border-[#F1F2F6] shrink-0">
-            <span className="text-xs text-muted-2 font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-[#F1F2F6] shrink-0">
+            <span className="text-xs text-muted-2 font-mono break-words">
               {file.isLoading ? 'loading…' : `${tab}.md · ${lineCount} ${lineCount === 1 ? 'entry' : 'entries'}`}
               {dirty && <span className="text-amber-text-2"> · unsaved changes</span>}
             </span>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-between sm:justify-end gap-2.5">
               {/* View / Edit segmented toggle */}
               <div className="flex items-center gap-0.5 bg-[#F1F2F6] rounded-[9px] p-0.5">
                 {['view', 'edit'].map((m) => (

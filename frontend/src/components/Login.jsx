@@ -31,19 +31,19 @@ export default function Login() {
   const authError = new URLSearchParams(window.location.search).has('auth_error');
 
   return (
-    <div className="h-screen bg-linear-to-b from-bg to-accent-soft flex items-center justify-center animate-fade-in">
+    <div className="min-h-dvh bg-linear-to-b from-bg to-accent-soft flex items-center justify-center animate-fade-in overflow-y-auto px-4 py-6">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: 'easeOut' }}
-        className="w-[420px] max-w-[90vw] flex flex-col items-center text-center"
+        className="w-[420px] max-w-full flex flex-col items-center text-center"
       >
         <div className="flex items-center gap-2.5 mb-8">
           <div className="w-2.5 h-2.5 rounded-full bg-accent" />
           <span className="text-[15px] font-bold tracking-tight text-text">Fluently</span>
         </div>
 
-        <div className="w-full bg-surface border border-border-2 rounded-[22px] shadow-soft px-9 py-10">
+        <div className="w-full bg-surface border border-border-2 rounded-[22px] shadow-soft px-6 sm:px-9 py-8 sm:py-10">
           <h1 className="m-0 text-[28px] font-bold tracking-tight leading-tight text-text">
             Welcome back.
           </h1>

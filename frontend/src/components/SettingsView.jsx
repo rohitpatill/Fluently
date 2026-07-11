@@ -22,8 +22,8 @@ function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger
   }
 
   return (
-    <div className={`bg-surface border rounded-[18px] p-5 ${danger ? 'border-[#F2CBC7]' : 'border-border'}`}>
-      <div className="flex items-start gap-4">
+    <div className={`bg-surface border rounded-[18px] p-4 sm:p-5 ${danger ? 'border-[#F2CBC7]' : 'border-border'}`}>
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${danger ? 'bg-[#FCEFEE] text-red' : 'bg-accent-soft text-accent'}`}>
           <Icon size={18} />
         </div>
@@ -36,7 +36,7 @@ function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger
           <button
             onClick={() => setOpen(true)}
             disabled={busy}
-            className={`shrink-0 rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border ${
+            className={`shrink-0 self-start sm:self-auto rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border ${
               danger
                 ? 'bg-transparent text-red border-[#F2CBC7] hover:bg-[#FCEFEE]'
                 : 'bg-transparent text-accent border-accent-soft-border hover:bg-accent-soft'
@@ -70,7 +70,7 @@ function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger
                   className="mt-3 w-full bg-surface border border-border-2 rounded-[10px] px-3.5 py-2.5 text-[13.5px] outline-none text-text focus:border-[#F2CBC7]"
                 />
               )}
-              <div className="flex gap-2.5 mt-3">
+              <div className="flex flex-col sm:flex-row gap-2.5 mt-3">
                 <button
                   onClick={run}
                   disabled={!armed}
@@ -97,7 +97,7 @@ function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger
 
 function ToggleRow({ icon: Icon, title, description, checked, onChange }) {
   return (
-    <div className="bg-surface border border-border rounded-[18px] p-5 flex items-start gap-4">
+    <div className="bg-surface border border-border rounded-[18px] p-4 sm:p-5 flex items-start gap-4">
       <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-accent-soft text-accent">
         <Icon size={18} />
       </div>
@@ -127,7 +127,7 @@ function ToggleRow({ icon: Icon, title, description, checked, onChange }) {
 function ProfileCard({ me, onLogout, loggingOut }) {
   const initial = (me?.name || me?.email || '?').trim().charAt(0).toUpperCase();
   return (
-    <div className="bg-surface border border-border rounded-[18px] p-5 flex items-center gap-4">
+    <div className="bg-surface border border-border rounded-[18px] p-4 sm:p-5 flex flex-col min-[420px]:flex-row min-[420px]:items-center gap-4">
       {me?.picture ? (
         <img
           src={me.picture}
@@ -147,7 +147,7 @@ function ProfileCard({ me, onLogout, loggingOut }) {
       <button
         onClick={onLogout}
         disabled={loggingOut}
-        className="shrink-0 flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border bg-transparent text-text-3 border-border-2 hover:bg-[#F1F2F6] disabled:opacity-50"
+        className="shrink-0 flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border bg-transparent text-text-3 border-border-2 hover:bg-[#F1F2F6] disabled:opacity-50 w-full min-[420px]:w-auto"
       >
         {loggingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
         Log out
@@ -188,9 +188,9 @@ export default function SettingsView({ personaName, me }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-14 py-9">
+    <div className="h-full overflow-y-auto px-4 sm:px-7 lg:px-14 py-6 md:py-9">
       <div className="max-w-[760px] mx-auto">
-        <h2 className="m-0 text-[28px] font-bold tracking-tight">Settings</h2>
+        <h2 className="m-0 text-[24px] sm:text-[28px] font-bold tracking-tight">Settings</h2>
         <p className="mt-1.5 mb-0 text-sm text-muted">More coming here over time.</p>
 
         <div className="mt-8">

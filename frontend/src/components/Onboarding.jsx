@@ -56,7 +56,7 @@ export default function Onboarding({ onComplete }) {
   const structuring = saving && step === 2 && userAbout.trim().length > 0;
 
   return (
-    <div className="h-screen bg-linear-to-b from-bg to-accent-soft flex items-center justify-center animate-fade-in">
+    <div className="min-h-dvh bg-linear-to-b from-bg to-accent-soft flex items-center justify-center animate-fade-in overflow-y-auto px-4 py-6">
       <AnimatePresence>
         {structuring && (
           <motion.div
@@ -93,7 +93,7 @@ export default function Onboarding({ onComplete }) {
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="w-[620px] max-w-[90vw] flex flex-col gap-6">
+      <div className="w-[620px] max-w-full flex flex-col gap-6">
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[5px] rounded-full bg-accent" />
           <div className={`w-[26px] h-[5px] rounded-full transition-colors ${step === 2 ? 'bg-accent' : 'bg-[#DDE0EA]'}`} />
@@ -110,7 +110,7 @@ export default function Onboarding({ onComplete }) {
               className="flex flex-col gap-6"
             >
               <div>
-                <h1 className="m-0 text-4xl font-bold tracking-tight leading-tight">
+                <h1 className="m-0 text-[32px] sm:text-4xl font-bold tracking-tight leading-tight">
                   Someone is waiting
                   <br />
                   to meet you.
@@ -183,7 +183,7 @@ export default function Onboarding({ onComplete }) {
                 <button
                   onClick={goNext}
                   disabled={!canNext || saving}
-                  className="bg-accent hover:bg-accent-hover disabled:opacity-55 disabled:cursor-not-allowed text-white border-none rounded-2xl px-7.5 py-3.5 text-[15px] font-semibold shadow-accent-lg cursor-pointer transition-colors"
+                  className="w-full sm:w-auto bg-accent hover:bg-accent-hover disabled:opacity-55 disabled:cursor-not-allowed text-white border-none rounded-2xl px-7.5 py-3.5 text-[15px] font-semibold shadow-accent-lg cursor-pointer transition-colors"
                 >
                   {saving ? 'Saving…' : `Bring ${name.trim() || 'them'} to life →`}
                 </button>
@@ -230,14 +230,14 @@ export default function Onboarding({ onComplete }) {
                 </div>
               </div>
 
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-3">
                 <button onClick={() => setStep(1)} className="bg-transparent border-none text-[13.5px] text-muted-2 cursor-pointer">
                   ← Back
                 </button>
                 <button
                   onClick={finish}
                   disabled={!userName.trim() || saving}
-                  className="bg-accent hover:bg-accent-hover disabled:opacity-55 disabled:cursor-not-allowed text-white border-none rounded-2xl px-7.5 py-3.5 text-[15px] font-semibold shadow-accent-lg cursor-pointer transition-colors"
+                  className="w-full sm:w-auto bg-accent hover:bg-accent-hover disabled:opacity-55 disabled:cursor-not-allowed text-white border-none rounded-2xl px-7.5 py-3.5 text-[15px] font-semibold shadow-accent-lg cursor-pointer transition-colors"
                 >
                   {saving ? 'Starting…' : `Start talking to ${name.trim() || 'them'} ✦`}
                 </button>

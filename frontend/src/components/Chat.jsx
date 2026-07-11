@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
-import { ChevronDown, Plus, Search, Send, Sparkles, Trash2, Wrench } from 'lucide-react';
+import { ChevronDown, Menu, Plus, Search, Send, Sparkles, Trash2, Wrench, X } from 'lucide-react';
 
 import * as api from '../api';
 import { useConversations, useMessages } from '../hooks/useApi';
@@ -56,7 +56,7 @@ function ScoringChip({ event, index, animate }) {
 
 function ScoringChips({ events, animate = true }) {
   return (
-    <div className="flex gap-2 flex-wrap justify-end max-w-[560px]">
+    <div className="flex gap-2 flex-wrap justify-end max-w-full sm:max-w-[560px]">
       {events.map((e, i) => (
         <ScoringChip key={e.id ?? i} event={e} index={i} animate={animate} />
       ))}
@@ -173,6 +173,7 @@ export default function Chat({ personaName }) {
   const [chipsByMessage, setChipsByMessage] = useState({}); // user message id -> scoring events (session only)
   const [topicsByConv, setTopicsByConv] = useState({}); // conv id -> topic cards from creation
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [threadsOpen, setThreadsOpen] = useState(false);
   const [clock, setClock] = useState(nowClockLabel());
 
   const messages = useMessages(activeId);
@@ -192,6 +193,10 @@ export default function Chat({ personaName }) {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages.data, typing, pendingUser]);
+
+  useEffect(() => {
+    setThreadsOpen(false);
+  }, [activeId]);
 
   const filteredThreads = useMemo(() => {
     const list = conversations.data || [];
@@ -288,10 +293,10 @@ export default function Chat({ personaName }) {
   const greeting = hour < 5 ? 'Up late, are we?' : hour < 12 ? 'Good morning ✦' : hour < 17 ? 'Good afternoon ✦' : 'Good evening ✦';
 
   return (
-    <div className="h-full flex">
+    <div className="h-full min-h-0 flex flex-col md:flex-row">
       {/* threads */}
-      <div className="w-[290px] bg-[#FBFBFC] border-r border-border flex flex-col pt-6 shrink-0">
-        <div className="px-5 flex items-center justify-between">
+      <div className="hidden md:flex md:w-[290px] md:max-h-none bg-[#FBFBFC] md:border-r border-border flex-col md:pt-6 shrink-0">
+        <div className="px-4 md:px-5 flex items-center justify-between">
           <span className="text-[17px] font-bold">Conversations</span>
           <button
             onClick={() => newChat.mutate()}
@@ -302,7 +307,7 @@ export default function Chat({ personaName }) {
             {newChat.isPending ? <Spinner className="w-4 h-4 border-2 border-white/40 border-t-white" /> : <Plus size={17} />}
           </button>
         </div>
-        <div className="mx-5 mt-4 mb-2 flex items-center gap-2 bg-[#F1F2F6] rounded-[10px] px-3">
+        <div className="mx-4 md:mx-5 mt-3 md:mt-4 mb-2 flex items-center gap-2 bg-[#F1F2F6] rounded-[10px] px-3">
           <Search size={13} className="text-muted shrink-0" />
           <input
             value={threadQuery}
@@ -311,7 +316,7 @@ export default function Chat({ personaName }) {
             className="border-none outline-none bg-transparent text-[13px] py-2 w-full text-text"
           />
         </div>
-        <div className="flex-1 overflow-y-auto px-3 pb-5 pt-1.5 flex flex-col gap-1">
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 md:pb-5 pt-1.5 flex flex-col gap-1">
           {conversations.isLoading &&
             Array.from({ length: 4 }).map((_, i) => <ThreadItemSkeleton key={i} />)}
           {filteredThreads.map((t) => (
@@ -353,23 +358,127 @@ export default function Chat({ personaName }) {
         </div>
       </div>
 
+      <AnimatePresence>
+        {threadsOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            className="fixed inset-0 z-50 bg-black/25 md:hidden"
+            onClick={() => setThreadsOpen(false)}
+          >
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+              className="h-full w-[86vw] max-w-[340px] bg-[#FBFBFC] border-r border-border shadow-[18px_0_40px_-28px_rgba(26,29,39,.45)] flex flex-col pt-5 pb-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <PersonaAvatar name={personaName} size="sm" online />
+                  <div className="min-w-0">
+                    <div className="text-[15px] font-bold truncate">{personaName}</div>
+                    <div className="text-[12px] text-muted">conversations</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setThreadsOpen(false)}
+                  title="Close conversations"
+                  className="w-9 h-9 rounded-xl border-none bg-[#F1F2F6] text-muted flex items-center justify-center cursor-pointer"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="px-4 flex items-center justify-between">
+                <span className="text-[17px] font-bold">Conversations</span>
+                <button
+                  onClick={() => newChat.mutate()}
+                  disabled={newChat.isPending}
+                  title="New conversation"
+                  className="w-8 h-8 border-none rounded-[10px] bg-accent hover:bg-accent-hover text-white flex items-center justify-center cursor-pointer shadow-accent disabled:opacity-60 transition-colors"
+                >
+                  {newChat.isPending ? <Spinner className="w-4 h-4 border-2 border-white/40 border-t-white" /> : <Plus size={17} />}
+                </button>
+              </div>
+              <div className="mx-4 mt-3 mb-2 flex items-center gap-2 bg-[#F1F2F6] rounded-[10px] px-3">
+                <Search size={13} className="text-muted shrink-0" />
+                <input
+                  value={threadQuery}
+                  onChange={(e) => setThreadQuery(e.target.value)}
+                  placeholder="Search conversations..."
+                  className="border-none outline-none bg-transparent text-[13px] py-2 w-full text-text"
+                />
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 pt-1.5 flex flex-col gap-1">
+                {conversations.isLoading &&
+                  Array.from({ length: 4 }).map((_, i) => <ThreadItemSkeleton key={i} />)}
+                {filteredThreads.map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => setActiveId(t.id)}
+                    className={`group rounded-xl px-3 py-2.5 cursor-pointer transition-colors ${
+                      activeId === t.id ? 'bg-accent-soft' : 'hover:bg-[#F1F2F6]'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-[13.5px] font-semibold truncate">{t.title}</span>
+                      <span className="text-[11px] text-muted-2 shrink-0">{formatThreadTime(t.updated_at)}</span>
+                    </div>
+                    {t.category && <span className="text-[11px] text-accent">{t.category}</span>}
+                  </div>
+                ))}
+                {!conversations.isLoading && filteredThreads.length === 0 && (
+                  <p className="text-[13px] text-muted-2 text-center mt-8 font-serif-italic">
+                    {threadQuery ? 'Nothing matches.' : 'No conversations yet'}
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* main */}
-      <div className="flex-1 flex flex-col bg-bg min-w-0">
+      <div className="flex-1 min-h-0 flex flex-col bg-bg min-w-0">
         {/* header */}
-        <div className="h-[72px] flex items-center justify-between px-8 border-b border-border shrink-0">
-          <div className="flex items-center gap-3.5">
+        <div className="h-[64px] md:h-[72px] flex items-center justify-between gap-3 px-4 md:px-8 border-b border-border shrink-0">
+          <button
+            type="button"
+            onClick={() => setThreadsOpen(true)}
+            title="Open conversations"
+            className="md:hidden w-10 h-10 rounded-xl border-none bg-surface text-accent shadow-card flex items-center justify-center cursor-pointer shrink-0"
+          >
+            <Menu size={19} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setThreadsOpen(true)}
+            className="md:hidden flex items-center gap-3 min-w-0 bg-transparent border-none p-0 text-left cursor-pointer"
+          >
+            <PersonaAvatar name={personaName} size="sm" online />
+            <div className="min-w-0">
+              <div className="text-[15px] font-bold truncate">{personaName}</div>
+              <div className="text-[12px] text-muted truncate">tap for conversations</div>
+            </div>
+          </button>
+          <div className="hidden md:flex items-center gap-3.5">
             <PersonaAvatar name={personaName} size="md" online />
             <div>
               <div className="text-[15.5px] font-bold">{personaName}</div>
               <div className="text-[12.5px] text-muted">always here to talk</div>
             </div>
           </div>
-          <div className="text-[12.5px] text-muted bg-surface border border-border-2 rounded-full px-3.5 py-1.5">{clock}</div>
+          <div className="text-[11.5px] md:text-[12.5px] text-muted bg-surface border border-border-2 rounded-full px-3 md:px-3.5 py-1.5 shrink-0">{clock}</div>
         </div>
 
         {activeId == null ? (
           /* no conversation selected */
-          <div className="flex-1 flex flex-col items-center justify-center gap-5">
+          <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 text-center">
             <PersonaAvatar name={personaName} size="xl" />
             <h2 className="m-0 text-2xl font-bold">{greeting}</h2>
             <p className="m-0 text-muted font-serif-italic">Start a conversation with {personaName}.</p>
@@ -383,14 +492,14 @@ export default function Chat({ personaName }) {
           </div>
         ) : isEmptyConversation ? (
           /* topic cards */
-          <div className="flex-1 flex flex-col items-center justify-center px-12 gap-7 overflow-y-auto">
+          <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 md:px-12 py-7 gap-6 md:gap-7 overflow-y-auto">
             <div className="text-center">
               <div className="mx-auto mb-4"><PersonaAvatar name={personaName} size="lg" /></div>
               <h2 className="m-0 text-[26px] font-bold tracking-tight">{greeting}</h2>
               <p className="mt-2 mb-0 text-[15px] text-muted font-serif-italic">What's on your mind? Or pick up where we left off.</p>
             </div>
             {topics.length > 0 && (
-              <div className="grid grid-cols-3 gap-4 w-full max-w-[860px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 md:gap-4 w-full max-w-[860px]">
                 {topics.map((tc, i) => (
                   <motion.button
                     key={i}
@@ -407,7 +516,7 @@ export default function Chat({ personaName }) {
                 ))}
               </div>
             )}
-            <div className="flex items-center gap-3.5">
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3.5 text-center">
               <span className="text-[13px] text-muted-2">Just start typing below, or</span>
               <button
                 onClick={letPersonaStart}
@@ -420,15 +529,15 @@ export default function Chat({ personaName }) {
           </div>
         ) : (
           /* messages */
-          <div ref={scrollRef} className="flex-1 px-[8%] py-7 flex flex-col gap-5 overflow-y-auto">
+          <div ref={scrollRef} className="flex-1 min-h-0 px-4 sm:px-6 md:px-[8%] py-5 md:py-7 flex flex-col gap-4 md:gap-5 overflow-y-auto">
             {messages.isLoading &&
               [false, true, false, true].map((mine, i) => <MessageBubbleSkeleton key={i} mine={mine} />)}
             {msgs.map((m) =>
               m.role === 'assistant' ? (
-                <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 max-w-[640px]">
+                <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5 md:gap-3 max-w-full md:max-w-[640px]">
                   <div className="mt-1"><PersonaAvatar name={personaName} size="xs" /></div>
                   <div className="min-w-0">
-                    <div className="bg-surface border border-border rounded-[4px_18px_18px_18px] px-4.5 py-3 text-[14.5px] leading-relaxed text-text-2 shadow-[0_3px_10px_-6px_rgba(26,29,39,.1)] [&_p]:m-0 [&_p+p]:mt-2">
+                    <div className="bg-surface border border-border rounded-[4px_18px_18px_18px] px-4 py-3 md:px-4.5 text-[14px] md:text-[14.5px] leading-relaxed text-text-2 shadow-[0_3px_10px_-6px_rgba(26,29,39,.1)] break-words [&_p]:m-0 [&_p+p]:mt-2">
                       <ReactMarkdown>{m.content}</ReactMarkdown>
                     </div>
                     {devMode && <ToolCalls calls={m.tool_calls} />}
@@ -436,7 +545,7 @@ export default function Chat({ personaName }) {
                 </motion.div>
               ) : (
                 <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-end gap-2">
-                  <div className="max-w-[560px] bg-accent text-white rounded-[18px_4px_18px_18px] px-4.5 py-3 text-[14.5px] leading-relaxed shadow-accent whitespace-pre-wrap">
+                  <div className="max-w-[88%] sm:max-w-[560px] bg-accent text-white rounded-[18px_4px_18px_18px] px-4 py-3 md:px-4.5 text-[14px] md:text-[14.5px] leading-relaxed shadow-accent whitespace-pre-wrap break-words">
                     {m.content}
                   </div>
                   {chipsByMessage[m.id] ? (
@@ -449,7 +558,7 @@ export default function Chat({ personaName }) {
             )}
             {pendingUser && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-end">
-                <div className="max-w-[560px] bg-accent text-white rounded-[18px_4px_18px_18px] px-4.5 py-3 text-[14.5px] leading-relaxed shadow-accent whitespace-pre-wrap">
+                <div className="max-w-[88%] sm:max-w-[560px] bg-accent text-white rounded-[18px_4px_18px_18px] px-4 py-3 md:px-4.5 text-[14px] md:text-[14.5px] leading-relaxed shadow-accent whitespace-pre-wrap break-words">
                   {pendingUser}
                 </div>
               </motion.div>
@@ -460,8 +569,8 @@ export default function Chat({ personaName }) {
 
         {/* composer */}
         {activeId != null && (
-          <div className="px-[8%] pb-6 pt-2 shrink-0">
-            <div className="bg-surface border border-border-2 rounded-[18px] shadow-[0_12px_30px_-14px_rgba(26,29,39,.18)] px-4.5 py-3 flex items-end gap-3">
+          <div className="px-4 sm:px-6 md:px-[8%] pb-4 md:pb-6 pt-2 shrink-0">
+            <div className="bg-surface border border-border-2 rounded-[18px] shadow-[0_12px_30px_-14px_rgba(26,29,39,.18)] px-3.5 md:px-4.5 py-3 flex items-end gap-3">
               <textarea
                 ref={inputRef}
                 value={draft}
