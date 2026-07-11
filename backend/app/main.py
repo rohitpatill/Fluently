@@ -6,13 +6,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import mongo
-from .routers import auth, chat, conversations, dashboard, memory, model, settings, words
+from .config import settings
+from .routers import auth, chat, conversations, dashboard, memory, model, settings as settings_router, words
 
 app = FastAPI(title="Fluently — English Proficiency Companion", version="0.1.0")
 
+# Allowed browser origins come from CORS_ALLOWED_ORIGINS in .env (comma-separated).
+# Every deployed frontend origin MUST be listed or the browser's CORS preflight
+# (OPTIONS) is rejected. Config-driven, so production is a .env change, not a code change.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,7 +29,7 @@ app.include_router(words.router)
 app.include_router(memory.router)
 app.include_router(model.router)
 app.include_router(dashboard.router)
-app.include_router(settings.router)
+app.include_router(settings_router.router)
 
 
 @app.on_event("startup")

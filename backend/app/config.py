@@ -36,12 +36,21 @@ class Settings(BaseSettings):
     oauth_redirect_base: str = "http://localhost:8000"
     # Where the user's browser is sent after a successful login (the SPA origin).
     frontend_url: str = "http://localhost:5173"
+    # Browser origins allowed by CORS — comma-separated, from .env. Every deployed
+    # frontend origin must be listed here or its requests are blocked by the browser.
+    # e.g. "http://localhost:5173,https://fluently-zeta.vercel.app"
+    cors_allowed_origins: str = "http://localhost:5173,http://localhost:3000"
     # Secret used to sign the JWT session cookie (HS256). Generate a strong random value.
     session_secret: str = ""
     # Secret used to sign the short-lived state/nonce cookie during the OAuth handshake.
     state_cookie_secret: str = ""
     session_cookie_name: str = "fluently_session"
     session_max_age_days: int = 7
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse cors_allowed_origins into a clean list (trims spaces + trailing slashes)."""
+        return [o.strip().rstrip("/") for o in self.cors_allowed_origins.split(",") if o.strip()]
 
     @property
     def google_redirect_uri(self) -> str:
