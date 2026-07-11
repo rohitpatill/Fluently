@@ -22,6 +22,31 @@ class Settings(BaseSettings):
     mongodb_db: str = "fluently"
     data_dir: str = "./data"
 
+    # --- Google OAuth ("Continue with Google") + session ---
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    # The public base URL of THIS backend. The Google callback is derived from it.
+    # In production, set this to e.g. https://api.yourapp.com (also flips cookies to Secure).
+    oauth_redirect_base: str = "http://localhost:8000"
+    # Where the user's browser is sent after a successful login (the SPA origin).
+    frontend_url: str = "http://localhost:5173"
+    # Secret used to sign the JWT session cookie (HS256). Generate a strong random value.
+    session_secret: str = ""
+    # Secret used to sign the short-lived state/nonce cookie during the OAuth handshake.
+    state_cookie_secret: str = ""
+    session_cookie_name: str = "fluently_session"
+    session_max_age_days: int = 7
+
+    @property
+    def google_redirect_uri(self) -> str:
+        """The exact redirect URI registered in Google Cloud Console."""
+        return f"{self.oauth_redirect_base.rstrip('/')}/api/auth/google/callback"
+
+    @property
+    def cookie_secure(self) -> bool:
+        """Cookies get the Secure flag automatically once the backend is served over https."""
+        return self.oauth_redirect_base.lower().startswith("https")
+
     # User's timezone — all temporal reasoning in the prompt is computed in this zone.
     user_timezone: str = "Asia/Kolkata"
 

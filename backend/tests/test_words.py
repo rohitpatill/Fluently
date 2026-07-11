@@ -60,12 +60,13 @@ def test_personal_note_appears_in_chat_prompt(client, monkeypatch):
     """The user's memory hook must reach the persona via the target-words block."""
     from app import repo
     from app.services import prompt_builder
+    from tests.conftest import TEST_USER_ID
 
     wid = client.post("/api/words", json={"text": "gallant", "kind": "word"}).json()["id"]
     client.put(f"/api/words/{wid}/note", json={"note": "Sherlock's coat scene."})
     cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
 
-    conv = repo.get_conversation(cid)
+    conv = repo.get_conversation(cid, TEST_USER_ID)
     prompt = prompt_builder.build_system_prompt(conv)
     assert "Sherlock's coat scene." in prompt
     assert "user's own memory hook" in prompt

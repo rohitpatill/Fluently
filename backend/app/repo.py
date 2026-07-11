@@ -12,12 +12,13 @@ from datetime import datetime
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from .models import Conversation, Message, Word, WordEvent, utcnow
+from .models import Conversation, Message, User, Word, WordEvent, utcnow
 from .mongo import (
     DEFAULT_USER_ID,
     conversations_col,
     memory_files_col,
     messages_col,
+    users_col,
     word_events_col,
     words_col,
 )
@@ -320,3 +321,57 @@ def purge_words(user_id: str = DEFAULT_USER_ID) -> int:
 def _escape_regex(text: str) -> str:
     import re
     return re.escape(text)
+
+
+# ============================================================ USERS / AUTH
+def get_user(user_id: str) -> User | None:
+    try:
+        doc = users_col().find_one({"_id": _oid(user_id)})
+    except ValueError:
+        return None
+    return User.from_doc(doc) if doc else None
+
+
+def get_user_by_sub(google_sub: str) -> User | None:
+    doc = users_col().find_one({"google_sub": google_sub})
+    return User.from_doc(doc) if doc else None
+
+
+def has_any_user() -> bool:
+    """True if at least one user account exists — used to detect the very first login."""
+    return users_col().count_documents({}, limit=1) > 0
+
+
+def upsert_user_from_google(sub: str, email: str, name: str = "", picture: str = "") -> tuple[User, bool]:
+    """Find the user by Google subject id, or create them. Returns (user, created).
+    On an existing user, refresh mutable profile fields (name/picture/email can change)."""
+    existing = get_user_by_sub(sub)
+    if existing:
+        users_col().update_one(
+            {"_id": _oid(existing.id)},
+            {"$set": {"email": email, "name": name, "picture": picture}},
+        )
+        existing.email, existing.name, existing.picture = email, name, picture
+        return existing, False
+
+    user = User(google_sub=sub, email=email, name=name, picture=picture)
+    res = users_col().insert_one(user.to_doc())
+    user.id = str(res.inserted_id)
+    return user, True
+
+
+def reassign_default_data(new_user_id: str) -> dict:
+    """One-time adoption: move every legacy `DEFAULT_USER_ID` document to `new_user_id`.
+    Called only for the first-ever user (guarded by the caller). Returns per-collection counts."""
+    counts = {}
+    for name, col in (
+        ("conversations", conversations_col()),
+        ("messages", messages_col()),
+        ("words", words_col()),
+        ("word_events", word_events_col()),
+        ("memory_files", memory_files_col()),
+    ):
+        res = col.update_many({"user_id": DEFAULT_USER_ID}, {"$set": {"user_id": new_user_id}})
+        counts[name] = res.modified_count
+    users_col().update_one({"_id": _oid(new_user_id)}, {"$set": {"adopted_default": True}})
+    return counts

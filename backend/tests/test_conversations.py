@@ -39,6 +39,7 @@ def _seed_searchable_chat(client):
     cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
     from app import repo
     from app.models import Message
+    from tests.conftest import TEST_USER_ID
 
     msgs = [
         ("user", "I watched a documentary about space telescopes"),
@@ -48,7 +49,9 @@ def _seed_searchable_chat(client):
         ("user", "Anyway, how is your day going?"),
     ]
     for i, (role, content) in enumerate(msgs, 1):
-        repo.insert_message(Message(conversation_id=cid, seq=i, role=role, content=content))
+        repo.insert_message(
+            Message(conversation_id=cid, seq=i, role=role, content=content, user_id=TEST_USER_ID)
+        )
     return cid
 
 

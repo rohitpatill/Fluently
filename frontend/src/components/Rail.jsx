@@ -8,7 +8,7 @@ const NAV = [
   { key: 'memory', label: 'Memory', Icon: NotebookText },
 ];
 
-export default function Rail({ view, setView, personaName, userName }) {
+export default function Rail({ view, setView, personaName, userName, me }) {
   return (
     <div className="w-[68px] bg-[#FDFDFE] border-r border-border flex flex-col items-center pt-[18px] pb-4 gap-1.5 shrink-0">
       <div className="mb-[18px]">
@@ -34,12 +34,17 @@ export default function Rail({ view, setView, personaName, userName }) {
       >
         <Settings size={19} strokeWidth={2} />
       </button>
-      <div
-        title={userName}
-        className="w-[34px] h-[34px] rounded-full bg-border-2 flex items-center justify-center text-[13px] font-semibold text-text-3"
+      <button
+        title={`${userName || me?.name || 'You'} — open Settings`}
+        onClick={() => setView('settings')}
+        className="w-[34px] h-[34px] rounded-full border-none p-0 cursor-pointer overflow-hidden bg-border-2 flex items-center justify-center text-[13px] font-semibold text-text-3"
       >
-        {initial(userName)}
-      </div>
+        {me?.picture ? (
+          <img src={me.picture} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+        ) : (
+          initial(userName || me?.name)
+        )}
+      </button>
     </div>
   );
 }

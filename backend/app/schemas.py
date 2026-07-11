@@ -3,6 +3,15 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+# ---------- Auth ----------
+class MeResponse(BaseModel):
+    id: str
+    email: str
+    name: str = ""
+    picture: str = ""
+    has_persona: bool = False
+
+
 # ---------- Words ----------
 class WordCreate(BaseModel):
     text: str

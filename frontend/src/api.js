@@ -11,6 +11,7 @@ async function request(path, options = {}) {
   let res;
   try {
     res = await fetch(`${BASE_URL}${path}`, {
+      credentials: 'include', // send/receive the session cookie cross-origin
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
       ...options,
     });
@@ -31,6 +32,16 @@ async function request(path, options = {}) {
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
+
+// ---------- Auth ----------
+export const getMe = () => request('/api/auth/me');
+
+export const logout = () => request('/api/auth/logout', { method: 'POST' });
+
+// Full-page redirect into the backend's Google login (which redirects on to Google).
+export const loginWithGoogle = () => {
+  window.location.href = `${BASE_URL}/api/auth/google/login`;
+};
 
 // ---------- Conversations ----------
 export const createConversation = (opts = {}) =>

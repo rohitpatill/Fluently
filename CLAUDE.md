@@ -60,7 +60,7 @@ master specific vocabulary words/phrases. The user adds words; the system weaves
 naturally into conversations, judges how well the user produces them, and tracks a
 0–100 proficiency score per word with a dashboard.
 
-**Stack:** React (frontend) + FastAPI + LangChain 1.x (Python) + MongoDB Atlas (cloud, via PyMongo sync). All DB access is behind a single swappable data layer (`backend/app/repo.py`). Every stored document carries a `user_id` (single-user sentinel `"default"` for now) — the app is ready for the planned Google-OAuth multi-user step, which becomes a filter, not a schema change.
+**Stack:** React (frontend) + FastAPI + LangChain 1.x (Python) + MongoDB Atlas (cloud, via PyMongo sync). All DB access is behind a single swappable data layer (`backend/app/repo.py`). **Multi-user via Google OAuth** ("Continue with Google" only): every stored document carries a `user_id` = a real user's id, and every request is scoped to the logged-in user. The `"default"` sentinel now only tags un-adopted legacy (pre-OAuth) data.
 
 ## Core concepts
 
@@ -121,6 +121,19 @@ naturally into conversations, judges how well the user produces them, and tracks
    raw-append on LLM failure so onboarding never breaks. The persona form's short discrete fields
    (name/relation/personality) and the raw markdown editor's manual edits are NOT LLM-structured
    — only the free-text onboarding box gets this treatment.
+9. **Auth (Google OAuth, "Continue with Google" only)** — no passwords. Server-side OAuth 2.0
+   Authorization Code flow: Google tokens never reach the browser; we read identity (sub/email/
+   name/picture) from the verified ID token and store NO Google tokens. A `users` collection keys
+   each Google `sub` → an internal `user_id` (the user doc's own `_id`), which flows into every
+   `repo`/service call. Session = a stateless signed JWT (PyJWT HS256) in an HttpOnly cookie
+   (`SameSite=Lax`, `Secure` auto-on over https). CSRF/replay guarded by a short-lived signed
+   state+nonce cookie during the handshake. `app/deps.py::get_current_user` resolves the cookie →
+   `user_id` for every router. **First** Google user to log in ADOPTS the legacy `"default"` data
+   (one-time); everyone else starts fresh (per-user onboarding). All redirect/session config is
+   `.env`-driven (`OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, secrets, `SESSION_MAX_AGE_DAYS`) so
+   production is a config change, not a code change. Server-side session revocation is a future
+   additive step (add a `token_version` claim) — not built yet. See `docs/oauth-handoff.md` for
+   the original decisions; API-key handling remains Phase 3 (encrypt-at-rest, NOT built).
 
 ## Repository layout
 
@@ -137,44 +150,50 @@ ENG/
 │   └── src/
 │       ├── main.jsx         React root: QueryClientProvider + sonner Toaster + font imports
 │       ├── index.css        Tailwind v4 @theme design tokens (colors/fonts/radii/shadows/keyframes)
-│       ├── api.js           fetch wrapper, one function per backend endpoint (base localhost:8000)
+│       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle
 │       ├── utils.js         time formatting, persona/identity name parsing from raw markdown
-│       ├── hooks/useApi.js  TanStack Query hooks (health poll, conversations, messages, words, stats, memory)
+│       ├── hooks/useApi.js  TanStack Query hooks (health poll, me/auth, conversations, messages, words, stats, memory)
 │       ├── hooks/useDevMode.js localStorage-backed Developer-mode toggle (client-only, off by default)
 │       └── components/
+│           ├── Login.jsx       auth gate — single "Continue with Google" screen (Fluently-styled)
 │           ├── Onboarding.jsx  2-step persona + user form
-│           ├── Rail.jsx        left nav — 3 main tabs (Chat, Words, Memory) + Settings gear at the bottom
+│           ├── Rail.jsx        left nav — 3 main tabs (Chat, Words, Memory) + Settings gear + Google-avatar (opens Settings)
 │           ├── Chat.jsx        threads sidebar, topic cards, opener, messages (markdown), scoring chips (persist + expandable), dev-mode tool-call viewer, composer
 │           ├── Words.jsx       stats cards, add+enrich, score bars, expandable detail: personal note (top) + meaning + collapsible event history
 │           ├── Memory.jsx      3 RAW markdown editors (identity/memory/persona) with Save → PUT .../raw
-│           ├── SettingsView.jsx Developer-mode toggle + data-management hard-delete cards
+│           ├── SettingsView.jsx Account profile (Google name/email/picture) + Log out, Developer-mode toggle, data-management hard-delete cards
 │           └── Shared.jsx      PersonaAvatar, Spinner, loaders, error screen, ScoreBar
 └── backend/
-    ├── requirements.txt
-    ├── .env.example     ← copy to .env and fill API keys
+    ├── requirements.txt  (+ google-auth, PyJWT, itsdangerous for OAuth/session)
+    ├── .env.example     ← copy to .env and fill API keys + Google OAuth client id/secret + session secrets
     ├── pytest.ini       ← live tests deselected by default (addopts -m "not live")
     ├── run_tests.py     ← one-shot concise test report (--live adds real-LLM smoke tests)
-    ├── tests/           ← permanent suite: conftest (isolated Mongo <db>_test + mocked LLMs),
+    ├── tests/           ← permanent suite: conftest (isolated Mongo <db>_test + mocked LLMs;
+    │                      `client` authed as a fixed user, `anon_client` for the real auth flow),
+    │                      test_auth (OAuth flow + first-user adoption + data isolation),
     │                      test_memory, test_words, test_scoring, test_conversations, test_chat,
     │                      test_dashboard, test_settings, test_mongo_connection (@live),
     │                      test_live_smoke (@pytest.mark.live)
     ├── import_sqlite_to_mongo.py  ← one-time SQLite→Mongo migration script (id remap; --commit/--wipe)
     ├── data/            ← legacy pre-migration BACKUP only (old eng.db + .md files); app no longer uses it
     └── app/
-        ├── main.py              FastAPI app, CORS, routers, startup (mongo ping → ensure_indexes → bootstrap memory docs)
-        ├── config.py            pydantic-settings: keys, model choices, scoring constants, user_timezone, mongodb_uri/db
-        ├── mongo.py             MongoDB connection (PyMongo), collection accessors, ensure_indexes, DEFAULT_USER_ID
-        ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here)
-        ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids, user_id): Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id)
-        ├── schemas.py           all Pydantic request/response models
+        ├── main.py              FastAPI app, CORS (credentials on), routers (incl. auth), startup (mongo ping → ensure_indexes; memory bootstrap is per-user on login)
+        ├── config.py            pydantic-settings: keys, model choices, scoring constants, user_timezone, mongodb_uri/db, Google-OAuth + session settings (redirect base, frontend url, secrets, cookie)
+        ├── mongo.py             MongoDB connection (PyMongo), collection accessors (incl. users_col), ensure_indexes (incl. uq_google_sub), DEFAULT_USER_ID
+        ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here); incl. user upsert + first-login default-data adoption
+        ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids): Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id), User (google_sub/email/name/picture)
+        ├── deps.py              FastAPI auth dependencies: get_current_user (cookie→user_id, 401 else), get_current_user_obj (→ profile)
+        ├── schemas.py           all Pydantic request/response models (incl. MeResponse)
         ├── prompts.py           ALL prompt templates (chat system, judge, topics, enrich, onboarding-structure, title, opener)
         ├── routers/
+        │   ├── auth.py          Google OAuth + session: /api/auth/google/login + /callback, /me, /logout
         │   ├── chat.py          POST /api/chat/{conversation_id} — full turn + judge scoring
         │   ├── conversations.py CRUD + topic suggestions + opener + POST /api/conversations/search
         │   ├── words.py         CRUD + LLM enrichment on add + manual adjust + event history + PUT /note (user hook)
         │   ├── memory.py        read/append/edit (old_string->new_string) memory files + PUT persona/form + POST onboarding (LLM-structured)
         │   └── dashboard.py     GET /api/dashboard/stats
         └── services/
+            ├── auth_service.py     Google OAuth flow + JWT session (build auth url, code exchange, ID-token verify, signed state/nonce, mint/decode session JWT)
             ├── llm_service.py      init_chat_model factory (openai | anthropic | google_genai)
             ├── prompt_builder.py   dynamic system prompt assembly
             ├── chat_service.py     manual tool-calling loop, history reconstruction, auto-title
@@ -188,6 +207,7 @@ ENG/
 
 ## API surface
 
+- **Auth:** `GET /api/auth/google/login` (→ Google consent), `GET /api/auth/google/callback` (verify → session cookie → redirect to frontend; failure → `frontend_url/?auth_error=1`), `GET /api/auth/me` (profile + `has_persona`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires the session cookie (401 without it) and is scoped to that user.
 - `POST /api/conversations` — new chat; picks target words; returns topic suggestions (first LLM call of a new chat)
 - `PATCH /api/conversations/{id}/category` — set topic after user picks one
 - `POST /api/conversations/{id}/opener` — persona opens the chat itself (time/memory aware)
@@ -218,12 +238,21 @@ providers) → 4. `bind_tools(...).invoke()` loop (max 6 iterations) executing t
   NOT `create_agent`/checkpointers — we own persistence in MongoDB.
 - Persistence: MongoDB Atlas via PyMongo (sync), ALL access behind `app/repo.py` (the single
   swappable data layer — services/routers never touch pymongo). `app/mongo.py` owns the client,
-  collections, and indexes. IDs are ObjectId hex STRINGS end-to-end. Every doc has a `user_id`
-  (sentinel `"default"`); words are unique per `(user_id, text)`. The 3 memory files live in the
-  `memory_files` collection. `data/` is now just a legacy backup; the app never reads it.
+  collections, and indexes. IDs are ObjectId hex STRINGS end-to-end. Every data doc has a `user_id`
+  (a real Google user's id; `"default"` only tags un-adopted legacy data); words are unique per
+  `(user_id, text)`. The 3 memory files live in the `memory_files` collection; users in the
+  `users` collection. `data/` is now just a legacy backup; the app never reads it.
+- Auth: Google OAuth only, server-side code flow, stateless JWT session cookie. Routers resolve
+  the user via `Depends(get_current_user)` (`app/deps.py`) — NEVER hardcode a user id. Store NO
+  Google tokens. Any new persisted auth state (e.g. a future `token_version` for revocation) goes
+  through `repo.py`. Verify against `docs/oauth-handoff.md` for the locked decisions.
 - Gemini must use explicit provider string `google_genai` (bare `gemini-*` infers Vertex).
-- Env keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, plus `MONGODB_URI` (SRV string
-  incl. `/fluently` db name) + `MONGODB_DB` (see `.env.example`, which carries a placeholder uri).
+- Env keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MONGODB_URI` (SRV string incl.
+  `/fluently` db name) + `MONGODB_DB`, plus the Google-OAuth block (`GOOGLE_OAUTH_CLIENT_ID`/
+  `_SECRET`, `OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, `SESSION_SECRET`, `STATE_COOKIE_SECRET`,
+  `SESSION_MAX_AGE_DAYS`). Real secrets ONLY in `.env`; `.env.example` carries placeholders. For
+  production: change `OAUTH_REDIRECT_BASE`/`FRONTEND_URL` and add the prod callback URI in Google
+  Console — no code change (cookies auto-flip to `Secure` over https).
 - LLM failures in judge/topics/enrichment/title/onboarding-structuring are swallowed — never break chat or onboarding.
 - Sync PyMongo + sync routes (FastAPI threadpools them). Streaming/SSE is a planned
   upgrade (pattern documented in research: astream + StreamingResponse).

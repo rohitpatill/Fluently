@@ -22,10 +22,16 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 from app import mongo
+from app.deps import get_current_user, get_current_user_obj
 from app.main import app
-from app.services import chat_service, judge_service, topic_service
+from app.models import User
+from app.services import chat_service, judge_service, memory_service, topic_service
 
-_COLLECTIONS = ["conversations", "messages", "words", "word_events", "memory_files"]
+_COLLECTIONS = ["conversations", "messages", "words", "word_events", "memory_files", "users"]
+
+# A stable, fixed user that the default `client` fixture is authenticated as. Existing
+# router tests then run scoped to this user without needing a real Google login.
+TEST_USER_ID = "0123456789abcdef01234567"
 
 
 @pytest.fixture(autouse=True)
@@ -39,8 +45,40 @@ def fresh_db():
         db[c].delete_many({})
 
 
+def seed_user(user_id: str, *, sub: str | None = None, email: str | None = None) -> User:
+    """Insert a user doc with a chosen _id and bootstrap their 3 memory files."""
+    from datetime import datetime, timezone
+
+    from bson import ObjectId
+
+    sub = sub or f"sub-{user_id}"
+    email = email or f"{user_id}@example.com"
+    mongo.users_col().insert_one(
+        {"_id": ObjectId(user_id), "google_sub": sub, "email": email,
+         "name": "Test User", "picture": "", "adopted_default": False,
+         "created_at": datetime.now(timezone.utc)}
+    )
+    memory_service.ensure_files(user_id)
+    return User(id=user_id, google_sub=sub, email=email, name="Test User")
+
+
 @pytest.fixture
 def client():
+    """Authenticated client, scoped to TEST_USER_ID (auth dependency overridden)."""
+    seed_user(TEST_USER_ID)
+    test_user = User(id=TEST_USER_ID, google_sub=f"sub-{TEST_USER_ID}",
+                     email=f"{TEST_USER_ID}@example.com", name="Test User")
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER_ID
+    app.dependency_overrides[get_current_user_obj] = lambda: test_user
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def anon_client():
+    """Unauthenticated client (no dependency override) — for testing auth gating itself."""
+    app.dependency_overrides.clear()
     with TestClient(app) as c:
         yield c
 

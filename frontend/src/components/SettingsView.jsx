@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, Loader2, MessagesSquare, NotebookPen, ShieldAlert, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, Loader2, LogOut, MessagesSquare, NotebookPen, ShieldAlert, Trash2, Wrench } from 'lucide-react';
 
 import * as api from '../api';
 import { useDevMode } from '../hooks/useDevMode';
@@ -124,10 +124,55 @@ function ToggleRow({ icon: Icon, title, description, checked, onChange }) {
   );
 }
 
-export default function SettingsView({ personaName }) {
+function ProfileCard({ me, onLogout, loggingOut }) {
+  const initial = (me?.name || me?.email || '?').trim().charAt(0).toUpperCase();
+  return (
+    <div className="bg-surface border border-border rounded-[18px] p-5 flex items-center gap-4">
+      {me?.picture ? (
+        <img
+          src={me.picture}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="w-12 h-12 rounded-full object-cover shrink-0"
+        />
+      ) : (
+        <div className="w-12 h-12 rounded-full bg-accent-soft text-accent flex items-center justify-center text-lg font-semibold shrink-0">
+          {initial}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="text-[15px] font-bold truncate">{me?.name || 'Signed in'}</div>
+        <div className="text-[13px] text-muted truncate">{me?.email}</div>
+      </div>
+      <button
+        onClick={onLogout}
+        disabled={loggingOut}
+        className="shrink-0 flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border bg-transparent text-text-3 border-border-2 hover:bg-[#F1F2F6] disabled:opacity-50"
+      >
+        {loggingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+        Log out
+      </button>
+    </div>
+  );
+}
+
+export default function SettingsView({ personaName, me }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [devMode, setDevMode] = useDevMode();
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await api.logout();
+      // Clearing the me cache drops the app back to the login screen; wipe the rest too.
+      queryClient.clear();
+    } catch (e) {
+      toast.error(e.message);
+      setLoggingOut(false);
+    }
+  }
 
   async function exec(fn, successMsg) {
     setBusy(true);
@@ -147,6 +192,11 @@ export default function SettingsView({ personaName }) {
       <div className="max-w-[760px] mx-auto">
         <h2 className="m-0 text-[28px] font-bold tracking-tight">Settings</h2>
         <p className="mt-1.5 mb-0 text-sm text-muted">More coming here over time.</p>
+
+        <div className="mt-8">
+          <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3">Account</div>
+          <ProfileCard me={me} onLogout={handleLogout} loggingOut={loggingOut} />
+        </div>
 
         <div className="mt-8">
           <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3">Developer</div>

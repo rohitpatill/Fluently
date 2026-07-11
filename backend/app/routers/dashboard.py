@@ -1,16 +1,16 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from .. import repo
-from ..mongo import DEFAULT_USER_ID
+from ..deps import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/stats")
-def stats():
-    uid = DEFAULT_USER_ID
+def stats(user_id: str = Depends(get_current_user)):
+    uid = user_id
     counts = repo.dashboard_counts(uid)
 
     week_ago = datetime.now(timezone.utc) - timedelta(days=7)

@@ -11,10 +11,20 @@ export function useHealth() {
   });
 }
 
-export function usePersonaMemory() {
+export function useMe() {
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: api.getMe,
+    retry: false, // a 401 means "logged out" — resolve fast, don't retry
+    staleTime: 60_000,
+  });
+}
+
+export function usePersonaMemory({ enabled = true } = {}) {
   return useQuery({
     queryKey: ['memory', 'persona'],
     queryFn: () => api.getMemory('persona'),
+    enabled,
   });
 }
 
@@ -55,9 +65,10 @@ export function useWordEvents(wordId, enabled) {
   });
 }
 
-export function useMemoryFile(file) {
+export function useMemoryFile(file, { enabled = true } = {}) {
   return useQuery({
     queryKey: ['memory', file],
     queryFn: () => api.getMemory(file),
+    enabled,
   });
 }

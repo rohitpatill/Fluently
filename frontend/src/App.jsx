@@ -3,13 +3,14 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import Rail from './components/Rail';
+import Login from './components/Login';
 import Onboarding from './components/Onboarding';
 import Chat from './components/Chat';
 import Words from './components/Words';
 import Memory from './components/Memory';
 import SettingsView from './components/SettingsView';
 import { FullScreenError, FullScreenLoader } from './components/Shared';
-import { useHealth, useMemoryFile, usePersonaMemory } from './hooks/useApi';
+import { useHealth, useMe, useMemoryFile, usePersonaMemory } from './hooks/useApi';
 import { parseIdentityName, parsePersonaName } from './utils';
 
 export default function App() {
@@ -17,8 +18,12 @@ export default function App() {
   const queryClient = useQueryClient();
 
   const health = useHealth();
-  const persona = usePersonaMemory();
-  const identity = useMemoryFile('identity');
+  const me = useMe();
+
+  // Persona/identity are only needed once we know the user is authenticated.
+  const authed = !!me.data;
+  const persona = usePersonaMemory({ enabled: authed });
+  const identity = useMemoryFile('identity', { enabled: authed });
 
   if (health.isError) {
     return (
@@ -27,29 +32,37 @@ export default function App() {
         message="The backend at localhost:8000 isn't responding. Start it, then try again."
         onRetry={() => {
           health.refetch();
-          persona.refetch();
-          identity.refetch();
+          me.refetch();
         }}
       />
     );
   }
 
-  if (persona.isLoading || health.isLoading) return <FullScreenLoader label="Waking things up…" />;
+  if (health.isLoading || me.isLoading) return <FullScreenLoader label="Waking things up…" />;
 
-  const personaName = parsePersonaName(persona.data?.raw);
-  if (!personaName) {
+  // Not authenticated (no session / expired) → the login screen.
+  if (!authed) return <Login />;
+
+  // Authenticated but onboarding not finished (no persona Name yet) → onboarding.
+  if (!me.data.has_persona) {
     return (
       <Onboarding
-        onComplete={() => queryClient.invalidateQueries({ queryKey: ['memory'] })}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['memory'] });
+          queryClient.invalidateQueries({ queryKey: ['me'] });
+        }}
       />
     );
   }
 
-  const userName = parseIdentityName(identity.data?.raw);
+  if (persona.isLoading) return <FullScreenLoader label="Waking things up…" />;
+
+  const personaName = parsePersonaName(persona.data?.raw) || me.data.name || 'your companion';
+  const userName = parseIdentityName(identity.data?.raw) || me.data.name;
 
   return (
     <div className="h-screen flex animate-fade-in">
-      <Rail view={view} setView={setView} personaName={personaName} userName={userName} />
+      <Rail view={view} setView={setView} personaName={personaName} userName={userName} me={me.data} />
       <div className="flex-1 min-w-0 h-full">
         <AnimatePresence mode="wait">
           <motion.div
@@ -63,7 +76,7 @@ export default function App() {
             {view === 'chat' && <Chat personaName={personaName} />}
             {view === 'words' && <Words />}
             {view === 'memory' && <Memory personaName={personaName} />}
-            {view === 'settings' && <SettingsView personaName={personaName} />}
+            {view === 'settings' && <SettingsView personaName={personaName} me={me.data} />}
           </motion.div>
         </AnimatePresence>
       </div>

@@ -59,6 +59,10 @@ def memory_files_col():
     return get_db()["memory_files"]
 
 
+def users_col():
+    return get_db()["users"]
+
+
 def ping() -> dict:
     """Cheap round-trip to verify the cluster is reachable. Returns server 'ok'."""
     return get_client().admin.command("ping")
@@ -88,3 +92,8 @@ def ensure_indexes() -> None:
     memory_files_col().create_index(
         [("user_id", ASCENDING), ("file", ASCENDING)], unique=True, name="uq_user_file"
     )
+
+    # users: one doc per Google account. The doc's _id (hex str) IS the internal user_id
+    # that scopes every other collection. google_sub is the natural key from Google.
+    users_col().create_index([("google_sub", ASCENDING)], unique=True, name="uq_google_sub")
+    users_col().create_index([("email", ASCENDING)], name="user_email")

@@ -190,6 +190,52 @@ class Word:
         )
 
 
+class User:
+    """A Google-authenticated user. The doc's `_id` (hex string) IS the internal `user_id`
+    that scopes every other collection. `google_sub` is the stable subject id from Google."""
+
+    def __init__(
+        self,
+        google_sub: str,
+        email: str,
+        name: str = "",
+        picture: str = "",
+        adopted_default: bool = False,
+        id: str | None = None,
+        created_at: datetime | None = None,
+    ):
+        self.id = id
+        self.google_sub = google_sub
+        self.email = email
+        self.name = name
+        self.picture = picture
+        # True once this user has adopted the legacy "default" data (one-time, first user only).
+        self.adopted_default = adopted_default
+        self.created_at = created_at or utcnow()
+
+    def to_doc(self) -> dict:
+        return {
+            "google_sub": self.google_sub,
+            "email": self.email,
+            "name": self.name,
+            "picture": self.picture,
+            "adopted_default": self.adopted_default,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_doc(cls, doc: dict) -> "User":
+        return cls(
+            id=_oid_to_str(doc.get("_id")),
+            google_sub=doc.get("google_sub", ""),
+            email=doc.get("email", ""),
+            name=doc.get("name", ""),
+            picture=doc.get("picture", ""),
+            adopted_default=doc.get("adopted_default", False),
+            created_at=doc.get("created_at"),
+        )
+
+
 class WordEvent:
     def __init__(
         self,
