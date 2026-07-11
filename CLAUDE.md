@@ -277,12 +277,17 @@ per-user model) → 7. judge user message (same per-user model) → scoring even
   Git) — read `ENCRYPTION_KEY` from `.env`, encrypt via `crypto_service` when a test needs ciphertext.
 - Env keys: `ENCRYPTION_KEY` (Fernet, REQUIRED) + `MONGODB_URI` (SRV string incl. `/fluently` db
   name) + `MONGODB_DB`, plus the Google-OAuth block (`GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`,
-  `OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, `SESSION_SECRET`, `STATE_COOKIE_SECRET`,
-  `SESSION_MAX_AGE_DAYS`). Provider keys (`OPENAI/ANTHROPIC/GOOGLE_API_KEY`) + DEFAULT/JUDGE/UTILITY
-  model settings are LEGACY/unused (users bring their own key). Real secrets ONLY in `.env`;
-  `.env.example` carries placeholders (incl. no real `ENCRYPTION_KEY`). For production: change
-  `OAUTH_REDIRECT_BASE`/`FRONTEND_URL` and add the prod callback URI in Google Console — no code
-  change (cookies auto-flip to `Secure` over https).
+  `OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, `CORS_ALLOWED_ORIGINS`, `SESSION_SECRET`,
+  `STATE_COOKIE_SECRET`, `SESSION_MAX_AGE_DAYS`). Provider keys (`OPENAI/ANTHROPIC/GOOGLE_API_KEY`) +
+  DEFAULT/JUDGE/UTILITY model settings are LEGACY/unused (users bring their own key). The FRONTEND
+  reads its backend base URL from `VITE_API_URL` (Vite env, baked at build) — NEVER hardcoded. Real
+  secrets ONLY in `.env`; `.env.example` carries placeholders (incl. no real `ENCRYPTION_KEY`). For
+  production: set `OAUTH_REDIRECT_BASE`/`FRONTEND_URL` to the deployed HTTPS URLs, list the frontend
+  origin in `CORS_ALLOWED_ORIGINS`, point `VITE_API_URL` at the backend, and add the prod callback URI
+  in Google Console — no code change. Cookies auto-flip to `Secure` + `SameSite=None` when the
+  frontend and backend are on different domains (cross-site), so the session survives a split deploy.
+  **Full step-by-step: `docs/deployment-guide.md`** (Vercel + Render + Google Console + custom domain,
+  secret-free).
 - LLM failures in judge/topics/enrichment/title/onboarding-structuring are swallowed — never break chat or onboarding.
 - Sync PyMongo + sync routes (FastAPI threadpools them). Streaming/SSE is a planned
   upgrade (pattern documented in research: astream + StreamingResponse).

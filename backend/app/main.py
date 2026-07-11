@@ -2,6 +2,8 @@ from dotenv import load_dotenv
 
 load_dotenv()  # must run before anything reads provider env vars
 
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +12,16 @@ from .config import settings
 from .routers import auth, chat, conversations, dashboard, memory, model, settings as settings_router, words
 
 app = FastAPI(title="Fluently — English Proficiency Companion", version="0.1.0")
+
+# Background heartbeat: prints to the terminal that the server is alive every 30 seconds.
+HEARTBEAT_INTERVAL_SECONDS = 30
+_heartbeat_task: asyncio.Task | None = None
+
+
+async def _heartbeat_loop():
+    while True:
+        print("Server status: OK — Fluently backend is up and running.", flush=True)
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 # Allowed browser origins come from CORS_ALLOWED_ORIGINS in .env (comma-separated).
 # Every deployed frontend origin MUST be listed or the browser's CORS preflight
@@ -38,6 +50,15 @@ def startup():
     mongo.ensure_indexes()
     # Memory files are bootstrapped per-user on first login (see routers/auth.py),
     # not globally — there is no longer a single "default" user to seed.
+    # Start the 30-second server-status heartbeat printer.
+    global _heartbeat_task
+    _heartbeat_task = asyncio.create_task(_heartbeat_loop())
+
+
+@app.on_event("shutdown")
+def shutdown():
+    if _heartbeat_task is not None:
+        _heartbeat_task.cancel()
 
 
 @app.get("/api/health")
