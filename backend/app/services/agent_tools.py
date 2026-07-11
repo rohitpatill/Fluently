@@ -15,7 +15,8 @@ from . import memory_service, scoring_service, search_service
 
 class MemoryUpdateArgs(BaseModel):
     file: str = Field(
-        description="Which memory file to write to: "
+        description="Which memory file to write to — use the bare name ONLY, exactly one of "
+        "'identity' | 'memory' | 'persona' (NO '.md' suffix, no path): "
         "'identity' = timeless facts about WHO THE USER IS (name, background, job/studies, goals, "
         "tastes, personality, how they talk, recurring English mistakes) — no dates here; "
         "'memory' = the user's LIFE (events, people and who they are, relationships, plans, "
@@ -80,6 +81,7 @@ def build_tools(db: Session, current_conversation_id: int | None = None):
         The whole file is already in your context, so to edit or delete just quote the text you see.
         Prefer editing over appending a near-duplicate when a fact changes. Store absolute dates
         only for time-bound facts; never write a date on timeless facts like preferences or names."""
+        file = memory_service.normalize_file(file)  # tolerate 'identity.md' → 'identity'
         act = (action or "").strip().lower()
         if act == "append":
             if not text.strip():

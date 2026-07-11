@@ -31,10 +31,19 @@ _HEADERS = {
 }
 
 
+def normalize_file(file: str) -> str:
+    """Accept the bare key ('identity') and tolerate a '.md' suffix the model may add."""
+    key = (file or "").strip().lower()
+    if key.endswith(".md"):
+        key = key[:-3]
+    return key
+
+
 def _path(file: str) -> Path:
-    if file not in FILES:
+    key = normalize_file(file)
+    if key not in FILES:
         raise ValueError(f"Unknown memory file '{file}'. Use one of: {', '.join(FILES)}")
-    return settings.data_path / FILES[file]
+    return settings.data_path / FILES[key]
 
 
 def ensure_files() -> None:

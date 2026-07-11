@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, Loader2, MessagesSquare, NotebookPen, ShieldAlert, Trash2 } from 'lucide-react';
+import { AlertTriangle, Loader2, MessagesSquare, NotebookPen, ShieldAlert, Trash2, Wrench } from 'lucide-react';
 
 import * as api from '../api';
+import { useDevMode } from '../hooks/useDevMode';
 
 /* Danger levels: soft (accent-outline confirm) vs hard (type-to-confirm). */
 
@@ -94,9 +95,39 @@ function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger
   );
 }
 
+function ToggleRow({ icon: Icon, title, description, checked, onChange }) {
+  return (
+    <div className="bg-surface border border-border rounded-[18px] p-5 flex items-start gap-4">
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-accent-soft text-accent">
+        <Icon size={18} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[15px] font-bold">{title}</div>
+        <p className="mt-1 mb-0 text-[13px] text-muted leading-relaxed">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`shrink-0 w-11 h-6 rounded-full relative transition-colors cursor-pointer border-none ${
+          checked ? 'bg-accent' : 'bg-border-2'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? 'translate-x-5' : ''
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 export default function SettingsView({ personaName }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [devMode, setDevMode] = useDevMode();
 
   async function exec(fn, successMsg) {
     setBusy(true);
@@ -116,6 +147,17 @@ export default function SettingsView({ personaName }) {
       <div className="max-w-[760px] mx-auto">
         <h2 className="m-0 text-[28px] font-bold tracking-tight">Settings</h2>
         <p className="mt-1.5 mb-0 text-sm text-muted">More coming here over time.</p>
+
+        <div className="mt-8">
+          <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3">Developer</div>
+          <ToggleRow
+            icon={Wrench}
+            title="Developer mode"
+            description="Show the tools the agent used behind the scenes — memory updates, conversation searches, score adjustments — under each reply, with their inputs and outputs. Off by default; this is a peek under the hood, not needed for everyday practice."
+            checked={devMode}
+            onChange={setDevMode}
+          />
+        </div>
 
         <div className="mt-8">
           <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3">Data management</div>

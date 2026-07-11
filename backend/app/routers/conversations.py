@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Conversation, Message
+from ..models import Conversation, Message, Word, WordEvent
 from ..schemas import (
     ConversationCreate,
     ConversationOut,
@@ -11,6 +11,7 @@ from ..schemas import (
     SearchHit,
     SearchRequest,
     TopicSuggestion,
+    WordEventOut,
 )
 from ..services import chat_service, scoring_service, search_service, topic_service
 
@@ -58,7 +59,28 @@ def get_messages(conversation_id: int, db: Session = Depends(get_db)):
     conv = db.get(Conversation, conversation_id)
     if not conv:
         raise HTTPException(404, "Conversation not found")
-    return conv.messages
+
+    # Attach each user message's scoring events (with resolved word text) so the
+    # frontend can render persistent scoring chips that survive a page refresh.
+    events = (
+        db.query(WordEvent)
+        .filter(WordEvent.conversation_id == conversation_id, WordEvent.message_id.isnot(None))
+        .order_by(WordEvent.created_at.asc())
+        .all()
+    )
+    word_text = {w.id: w.text for w in db.query(Word.id, Word.text).all()}
+    by_message: dict[int, list[WordEventOut]] = {}
+    for e in events:
+        by_message.setdefault(e.message_id, []).append(
+            WordEventOut.model_validate(e).model_copy(update={"word_text": word_text.get(e.word_id)})
+        )
+
+    out: list[MessageOut] = []
+    for m in conv.messages:
+        mo = MessageOut.model_validate(m)
+        mo.word_events = by_message.get(m.id, [])
+        out.append(mo)
+    return out
 
 
 @router.patch("/{conversation_id}/category", response_model=ConversationOut)

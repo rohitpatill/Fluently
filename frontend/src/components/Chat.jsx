@@ -3,10 +3,11 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
-import { Plus, Search, Send, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Search, Send, Sparkles, Trash2, Wrench } from 'lucide-react';
 
 import * as api from '../api';
 import { useConversations, useMessages } from '../hooks/useApi';
+import { useDevMode } from '../hooks/useDevMode';
 import { PersonaAvatar, Spinner } from './Shared';
 import { formatThreadTime, nowClockLabel } from '../utils';
 
@@ -22,29 +23,125 @@ function chipKind(eventType) {
   return 'good';
 }
 
-function ScoringChips({ events }) {
+function ScoringChip({ event, index, animate }) {
+  const [open, setOpen] = useState(false);
+  const kind = chipKind(event.event_type);
+  const note = event.judge_notes || '';
+  const expandable = !!note;
+
+  return (
+    <motion.button
+      type="button"
+      initial={animate ? { opacity: 0, scale: 0.85 } : false}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: animate ? 0.15 + index * 0.1 : 0, type: 'spring', bounce: 0.4 }}
+      onClick={() => expandable && setOpen((v) => !v)}
+      title={expandable && !open ? note : ''}
+      className={`inline-flex items-start gap-1.5 border rounded-2xl px-3 py-1 text-xs font-medium text-left ${CHIP_STYLES[kind]} ${
+        expandable ? 'cursor-pointer' : 'cursor-default'
+      }`}
+    >
+      <Sparkles size={11} className="mt-[3px] shrink-0" />
+      <span className="font-semibold shrink-0">{event.word_text || `word #${event.word_id}`}</span>
+      <span className="font-mono shrink-0">{event.delta > 0 ? `+${event.delta}` : event.delta}</span>
+      {note && (
+        <span className={`font-normal opacity-90 ${open ? '' : 'max-w-[260px] truncate'}`}>· {note}</span>
+      )}
+      {expandable && (
+        <ChevronDown size={12} className={`mt-[3px] shrink-0 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`} />
+      )}
+    </motion.button>
+  );
+}
+
+function ScoringChips({ events, animate = true }) {
   return (
     <div className="flex gap-2 flex-wrap justify-end max-w-[560px]">
-      {events.map((e, i) => {
-        const kind = chipKind(e.event_type);
-        return (
+      {events.map((e, i) => (
+        <ScoringChip key={e.id ?? i} event={e} index={i} animate={animate} />
+      ))}
+    </div>
+  );
+}
+
+function ToolCallCard({ call, index }) {
+  const [open, setOpen] = useState(true); // individual card starts expanded when the group opens
+  return (
+    <div className="bg-surface border border-border-2 rounded-xl text-[12px] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 bg-transparent border-none cursor-pointer text-left hover:bg-[#F7F8FA] transition-colors"
+      >
+        <span className="text-[10px] font-mono text-muted-2 shrink-0">{index + 1}</span>
+        <span className="font-mono font-semibold text-accent flex-1 min-w-0 truncate">{call.name}</span>
+        <ChevronDown size={13} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {open && (
           <motion.div
-            key={i}
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15 + i * 0.1, type: 'spring', bounce: 0.4 }}
-            title={e.judge_notes || ''}
-            className={`inline-flex items-center gap-1.5 border rounded-full px-3 py-1 text-xs font-medium ${CHIP_STYLES[kind]}`}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            className="overflow-hidden"
           >
-            <Sparkles size={11} />
-            <span className="font-semibold">{e.word_text || `word #${e.word_id}`}</span>
-            <span className="font-mono">{e.delta > 0 ? `+${e.delta}` : e.delta}</span>
-            {kind !== 'good' && e.judge_notes && (
-              <span className="font-normal opacity-90 max-w-[260px] truncate">· {e.judge_notes}</span>
-            )}
+            <div className="px-3 pb-3">
+              {call.args && Object.keys(call.args).length > 0 && (
+                <div className="mb-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-2 mb-1">Input</div>
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[11.5px] text-text-2 bg-[#F7F8FA] rounded-lg p-2 m-0 overflow-x-auto">
+                    {JSON.stringify(call.args, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {call.output != null && call.output !== '' && (
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-2 mb-1">Output</div>
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[11.5px] text-text-2 bg-[#F7F8FA] rounded-lg p-2 m-0 max-h-56 overflow-auto">
+                    {typeof call.output === 'string' ? call.output : JSON.stringify(call.output, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
           </motion.div>
-        );
-      })}
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ToolCalls({ calls }) {
+  const [open, setOpen] = useState(false);
+  if (!calls?.length) return null;
+  return (
+    <div className="mt-1.5 max-w-[640px]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted bg-[#F1F2F6] hover:bg-[#E9EAF0] rounded-full px-2.5 py-1 border-none cursor-pointer transition-colors"
+      >
+        <Wrench size={11} />
+        {calls.length} tool call{calls.length > 1 ? 's' : ''}
+        <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 flex flex-col gap-2">
+              {calls.map((c, i) => (
+                <ToolCallCard key={i} call={c} index={i} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -66,6 +163,7 @@ function TypingIndicator({ personaName }) {
 export default function Chat({ personaName }) {
   const queryClient = useQueryClient();
   const conversations = useConversations();
+  const [devMode] = useDevMode();
 
   const [activeId, setActiveId] = useState(null);
   const [threadQuery, setThreadQuery] = useState('');
@@ -327,8 +425,11 @@ export default function Chat({ personaName }) {
               m.role === 'assistant' ? (
                 <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 max-w-[640px]">
                   <div className="mt-1"><PersonaAvatar name={personaName} size="xs" /></div>
-                  <div className="bg-surface border border-border rounded-[4px_18px_18px_18px] px-4.5 py-3 text-[14.5px] leading-relaxed text-text-2 shadow-[0_3px_10px_-6px_rgba(26,29,39,.1)] [&_p]:m-0 [&_p+p]:mt-2">
-                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                  <div className="min-w-0">
+                    <div className="bg-surface border border-border rounded-[4px_18px_18px_18px] px-4.5 py-3 text-[14.5px] leading-relaxed text-text-2 shadow-[0_3px_10px_-6px_rgba(26,29,39,.1)] [&_p]:m-0 [&_p+p]:mt-2">
+                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                    </div>
+                    {devMode && <ToolCalls calls={m.tool_calls} />}
                   </div>
                 </motion.div>
               ) : (
@@ -336,7 +437,11 @@ export default function Chat({ personaName }) {
                   <div className="max-w-[560px] bg-accent text-white rounded-[18px_4px_18px_18px] px-4.5 py-3 text-[14.5px] leading-relaxed shadow-accent whitespace-pre-wrap">
                     {m.content}
                   </div>
-                  {chipsByMessage[m.id] && <ScoringChips events={chipsByMessage[m.id]} />}
+                  {chipsByMessage[m.id] ? (
+                    <ScoringChips events={chipsByMessage[m.id]} />
+                  ) : (
+                    m.word_events?.length > 0 && <ScoringChips events={m.word_events} animate={false} />
+                  )}
                 </motion.div>
               )
             )}

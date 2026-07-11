@@ -52,6 +52,27 @@ def test_tool_calling_loop_and_transparency(client, monkeypatch):
     assert any("telescopes" in l["text"].lower() for l in lines)
 
 
+def test_memory_update_tolerates_md_suffix(client, monkeypatch):
+    """The model sometimes passes 'identity.md' instead of 'identity' — the tool must still write
+    it (and report the clean filename once), not fail with 'Unknown memory file'."""
+    cid = _new_conv(client)
+    responses = [
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "memory_update", "args": {"file": "identity.md", "action": "append", "text": "Loves biryani."}, "id": "call_md", "type": "tool_call"}],
+        ),
+        AIMessage(content="Got it."),
+    ]
+    monkeypatch.setattr(chat_service, "get_chat_model", lambda *a, **k: FakeChatModel(responses))
+
+    r = client.post(f"/api/chat/{cid}", json={"content": "remember I love biryani"})
+    output = r.json()["assistant_message"]["tool_calls"][0]["output"]
+    assert "Unknown memory file" not in output
+    assert output == "Saved a new memory to identity.md."  # clean name, not identity.md.md
+    lines = client.get("/api/memory/identity").json()["lines"]
+    assert any("biryani" in l["text"].lower() for l in lines)
+
+
 def test_history_reconstruction_includes_tool_calls(client, monkeypatch):
     """Second turn must replay the first turn's AIMessage(tool_calls)+ToolMessage pair."""
     cid = _new_conv(client)
@@ -92,6 +113,34 @@ def test_judge_applies_scoring_events(client, monkeypatch):
     assert len(events) == 1
     assert events[0]["event_type"] == "perfect_unprompted" and events[0]["delta"] == 5.0
     assert client.get(f"/api/words/{wid}").json()["score"] == 5.0
+
+
+def test_messages_endpoint_returns_persisted_scoring_events(client, monkeypatch):
+    """Scoring chips must survive a refresh: GET .../messages attaches each user message's
+    word_events (with resolved word_text) so the frontend can re-render them."""
+    client.post("/api/words", json={"text": "ubiquitous", "kind": "word"})
+    cid = _new_conv(client)
+
+    result = judge_service.JudgeResult(
+        judgements=[judge_service.UsageJudgement(word="ubiquitous", classification="awkward", suggestion="Try: everywhere.")]
+    )
+    monkeypatch.setattr(
+        judge_service, "get_judge_model",
+        lambda *a, **k: FakeStructuredFactory({judge_service.JudgeResult: result}),
+    )
+    client.post(f"/api/chat/{cid}", json={"content": "Phones are ubiquitous."})
+
+    msgs = client.get(f"/api/conversations/{cid}/messages").json()
+    user_msg = next(m for m in msgs if m["role"] == "user")
+    assistant_msg = next(m for m in msgs if m["role"] == "assistant")
+    assert len(user_msg["word_events"]) == 1
+    ev = user_msg["word_events"][0]
+    assert ev["event_type"] == "awkward"
+    assert ev["word_text"] == "ubiquitous"
+    assert ev["judge_notes"] == "Try: everywhere."
+    assert ev["message_id"] == user_msg["id"]
+    # events attach to the user message only, never the assistant reply
+    assert assistant_msg["word_events"] == []
 
 
 def test_judge_failure_never_breaks_chat(client, monkeypatch):

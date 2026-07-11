@@ -33,7 +33,9 @@ class WordScoreAdjust(BaseModel):
 class WordEventOut(BaseModel):
     id: int
     word_id: int
+    word_text: str | None = None  # resolved word text (for chips) — not a column
     conversation_id: int | None
+    message_id: int | None = None
     event_type: str
     delta: float
     score_after: float
@@ -74,6 +76,9 @@ class MessageOut(BaseModel):
     role: str
     content: str
     tool_calls: list
+    # scoring events the judge attached to THIS message (user messages only) — powers
+    # persistent scoring chips that survive a page refresh. Populated by GET .../messages.
+    word_events: list[WordEventOut] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
