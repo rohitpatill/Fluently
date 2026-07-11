@@ -32,7 +32,7 @@ _HEADERS = {
 
 
 def normalize_file(file: str) -> str:
-    """Accept the bare key ('identity') and tolerate a '.md' suffix the model may add."""
+    """Accept the bare key ('identity'); defensively strip a stray '.md' suffix if one slips in."""
     key = (file or "").strip().lower()
     if key.endswith(".md"):
         key = key[:-3]
@@ -92,7 +92,7 @@ def edit(file: str, old_string: str, new_string: str, replace_all: bool = False,
         raise ValueError("old_string must not be empty")
     content = read_file(key, user_id)
     if old_string not in content:
-        raise KeyError(f"Text not found in {key}.md: {old_string!r}")
+        raise KeyError(f"Text not found in {key}: {old_string!r}")
 
     occurrences = content.count(old_string)
     count = -1 if replace_all else 1

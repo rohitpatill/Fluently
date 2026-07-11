@@ -5,6 +5,8 @@ Tool outputs are returned to the model as ToolMessages and stored on the assista
 message record (transparency), but are NOT injected as visible chat messages.
 """
 
+from typing import Literal
+
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
@@ -14,9 +16,9 @@ from . import memory_service, scoring_service, search_service
 
 
 class MemoryUpdateArgs(BaseModel):
-    file: str = Field(
-        description="Which memory file to write to — use the bare name ONLY, exactly one of "
-        "'identity' | 'memory' | 'persona' (NO '.md' suffix, no path): "
+    file: Literal["identity", "memory", "persona"] = Field(
+        description="Which memory record to write to — exactly one of "
+        "'identity' | 'memory' | 'persona': "
         "'identity' = timeless facts about WHO THE USER IS (name, background, job/studies, goals, "
         "tastes, personality, how they talk, recurring English mistakes) — no dates here; "
         "'memory' = the user's LIFE (events, people and who they are, relationships, plans, "
@@ -24,7 +26,7 @@ class MemoryUpdateArgs(BaseModel):
         "'persona' = what YOU remember about your relationship with the user (shared jokes, "
         "promises, moments), first-person from your side."
     )
-    action: str = Field(
+    action: Literal["append", "edit"] = Field(
         description="'append' to add a new memory, or 'edit' to change/remove existing text."
     )
     text: str = Field(
@@ -52,7 +54,7 @@ class MemoryUpdateArgs(BaseModel):
 
 class SearchArgs(BaseModel):
     query: str = Field(description="What to search for in past conversations (keywords or a regex)")
-    mode: str = Field(default="bm25", description="'bm25' for keyword relevance ranking, 'regex' for exact/pattern match")
+    mode: Literal["bm25", "regex"] = Field(default="bm25", description="'bm25' for keyword relevance ranking, 'regex' for exact/pattern match")
     n_before: int = Field(default=3, description="Messages of context to include before each match")
     n_after: int = Field(default=3, description="Messages of context to include after each match")
     full_conversation: bool = Field(default=False, description="Return the entire conversation containing each match instead of a window")
@@ -82,26 +84,28 @@ def build_tools(current_conversation_id: str | None = None, user_id: str = DEFAU
         Prefer editing over appending a near-duplicate when a fact changes. Store absolute dates
         only for time-bound facts; never write a date on timeless facts like preferences or names."""
         file = memory_service.normalize_file(file)  # tolerate 'identity.md' → 'identity'
-        act = (action or "").strip().lower()
+        # Safety net: the enum should prevent it, but if a fused value like
+        # "append, new_string" ever slips through, keep only the leading verb.
+        act = (action or "").strip().lower().split(",")[0].split()[0] if action else ""
         if act == "append":
             if not text.strip():
                 return "append requires non-empty `text`."
             memory_service.append(file, text, user_id)
-            return f"Saved a new memory to {file}.md."
+            return f"Saved a new memory to {file}."
         if act == "edit":
             try:
                 memory_service.edit(file, old_string, new_string, replace_all, user_id)
             except KeyError:
                 return (
-                    f"Could not find that text in {file}.md. Copy `old_string` exactly as it "
-                    f"appears in the file (without the date/time stamp is fine)."
+                    f"Could not find that text in {file}. Copy `old_string` exactly as it "
+                    f"appears in your context."
                 )
             except ValueError as e:
                 return str(e)
             return (
-                f"Deleted the matched text from {file}.md."
+                f"Deleted the matched text from {file}."
                 if not new_string.strip()
-                else f"Updated {file}.md."
+                else f"{file} updated."
             )
         return "Unknown action. Use 'append' or 'edit'."
 

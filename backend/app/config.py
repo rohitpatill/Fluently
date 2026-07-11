@@ -91,7 +91,6 @@ class Settings(BaseSettings):
     score_awkward: float = 1.0
     score_wrong: float = -2.0
     score_passive: float = 0.5
-    score_daily_cap: float = 10.0
     decay_idle_days: int = 14
     decay_per_week: float = 1.0
 

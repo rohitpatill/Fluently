@@ -20,7 +20,7 @@ def _persona_block(user_id: str) -> tuple[str, str]:
     if "Name:" not in raw:
         return PERSONA_FALLBACK, name
     return (
-        "=== WHO YOU ARE (persona.md — assigned by the user) ===\n" + raw,
+        "=== WHO YOU ARE (persona — assigned by the user) ===\n" + raw,
         name,
     )
 

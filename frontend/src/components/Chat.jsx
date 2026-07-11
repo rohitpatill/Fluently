@@ -33,9 +33,9 @@ function ScoringChip({ event, index, animate }) {
   return (
     <motion.button
       type="button"
-      initial={animate ? { opacity: 0, scale: 0.85 } : false}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: animate ? 0.15 + index * 0.1 : 0, type: 'spring', bounce: 0.4 }}
+      initial={animate ? { opacity: 0, y: 4 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: animate ? 0.12 + index * 0.08 : 0, duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
       onClick={() => expandable && setOpen((v) => !v)}
       title={expandable && !open ? note : ''}
       className={`inline-flex items-start gap-1.5 border rounded-2xl px-3 py-1 text-xs font-medium text-left ${CHIP_STYLES[kind]} ${
@@ -43,8 +43,7 @@ function ScoringChip({ event, index, animate }) {
       }`}
     >
       <Sparkles size={11} className="mt-[3px] shrink-0" />
-      <span className="font-semibold shrink-0">{event.word_text || `word #${event.word_id}`}</span>
-      <span className="font-mono shrink-0">{event.delta > 0 ? `+${event.delta}` : event.delta}</span>
+      <span className="font-mono shrink-0 font-semibold">{event.delta > 0 ? `+${event.delta}` : event.delta}</span>
       {note && (
         <span className={`font-normal opacity-90 ${open ? '' : 'max-w-[260px] truncate'}`}>· {note}</span>
       )}
@@ -228,7 +227,10 @@ export default function Chat({ personaName }) {
       queryClient.invalidateQueries({ queryKey: ['words'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     }
-    queryClient.invalidateQueries({ queryKey: ['messages', activeId] });
+    // Fetch the fresh message list to completion BEFORE we drop the optimistic
+    // bubbles, so the real messages are already in cache when pendingUser/typing
+    // clear — no gap where the list briefly renders without them (the flicker).
+    await queryClient.refetchQueries({ queryKey: ['messages', activeId] });
     queryClient.invalidateQueries({ queryKey: ['conversations'] }); // auto-title
     queryClient.invalidateQueries({ queryKey: ['memory'] }); // agent may have written memories
   }
@@ -242,12 +244,15 @@ export default function Chat({ personaName }) {
     try {
       const data = await api.sendChatMessage(activeId, content);
       await afterAssistantReply(data);
+      // Real messages are now in cache — drop the optimistic bubble in the same
+      // commit as hiding the typing indicator, so the swap is invisible.
+      setPendingUser(null);
     } catch (e) {
       toast.error(e.message);
       setDraft(content); // give the text back
+      setPendingUser(null);
     } finally {
       setTyping(false);
-      setPendingUser(null);
       inputRef.current?.focus();
     }
   }

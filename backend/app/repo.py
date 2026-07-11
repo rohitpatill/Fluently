@@ -121,22 +121,6 @@ def events_for_conversation(conversation_id: str, user_id: str = DEFAULT_USER_ID
     return [WordEvent.from_doc(d) for d in docs]
 
 
-def gained_today(word_id: str, day_start: datetime, exclude_types: list[str]) -> float:
-    pipeline = [
-        {
-            "$match": {
-                "word_id": word_id,
-                "created_at": {"$gte": day_start},
-                "delta": {"$gt": 0},
-                "event_type": {"$nin": exclude_types},
-            }
-        },
-        {"$group": {"_id": None, "total": {"$sum": "$delta"}}},
-    ]
-    res = list(word_events_col().aggregate(pipeline))
-    return float(res[0]["total"]) if res else 0.0
-
-
 # ============================================================ CONVERSATIONS
 def list_conversations(user_id: str = DEFAULT_USER_ID) -> list[Conversation]:
     docs = conversations_col().find({"user_id": user_id}).sort("updated_at", -1)

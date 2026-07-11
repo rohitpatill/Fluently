@@ -1,4 +1,4 @@
-"""Scoring engine unit tests: matrix deltas, daily cap, decay, target-word picking."""
+"""Scoring engine unit tests: matrix deltas, no-cap gains, decay, target-word picking."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -31,16 +31,21 @@ def test_wrong_never_goes_below_zero():
     assert e.score_after == 0.0 and e.delta == -1.0
 
 
-def test_daily_cap():
+def test_no_daily_cap_gains_apply_in_full():
+    # No cap: a word can climb 0 -> 100 in a single day, every gain in full.
     w = _word()
-    scoring_service.apply_event(w, "perfect_unprompted")  # +5
-    scoring_service.apply_event(w, "perfect_unprompted")  # +5 -> at cap 10
-    e = scoring_service.apply_event(w, "perfect_unprompted")  # capped to 0
-    assert e.delta == 0.0 and w.score == 10.0
-    # negative events still apply at cap
+    for _ in range(19):
+        scoring_service.apply_event(w, "perfect_unprompted")  # 19 * 5 = 95
+    assert w.score == 95.0
+    # last gain clamps to the 100 ceiling
+    e = scoring_service.apply_event(w, "perfect_unprompted")
+    assert w.score == 100.0 and e.delta == 5.0
+    # already at 100: further gain clamps to 0 delta (ceiling, not a daily cap)
+    assert scoring_service.apply_event(w, "perfect_unprompted").delta == 0.0
+    # negatives still apply
     assert scoring_service.apply_event(w, "wrong").delta == -2.0
-    # manual bypasses the cap
-    assert scoring_service.apply_event(w, "manual", manual_delta=50).delta == 50.0
+    # manual delta applies directly
+    assert scoring_service.apply_event(w, "manual", manual_delta=-50).delta == -50.0
 
 
 def test_usage_updates_last_used_and_times_used():

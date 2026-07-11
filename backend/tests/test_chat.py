@@ -46,29 +46,39 @@ def test_tool_calling_loop_and_transparency(client, monkeypatch):
     assert len(tool_calls) == 1
     assert tool_calls[0]["name"] == "memory_update"
     assert tool_calls[0]["id"] == "call_1"
-    assert "identity.md" in tool_calls[0]["output"]
+    assert "identity" in tool_calls[0]["output"]
+    assert ".md" not in tool_calls[0]["output"]  # records are named by bare key, never as files
     # the memory line was actually written
     lines = client.get("/api/memory/identity").json()["lines"]
     assert any("telescopes" in l["text"].lower() for l in lines)
 
 
-def test_memory_update_tolerates_md_suffix(client, monkeypatch):
-    """The model sometimes passes 'identity.md' instead of 'identity' — the tool must still write
-    it (and report the clean filename once), not fail with 'Unknown memory file'."""
+def test_memory_update_file_is_enum_locked(client, monkeypatch):
+    """`file` is enum-locked to identity|memory|persona at the schema layer, so a stray
+    'identity.md' is rejected by validation (never silently mis-stored). The clean bare name
+    writes normally and the output carries no '.md'."""
     cid = _new_conv(client)
     responses = [
+        # first the model (wrongly) sends 'identity.md' → schema rejects it; then it corrects
         AIMessage(
             content="",
-            tool_calls=[{"name": "memory_update", "args": {"file": "identity.md", "action": "append", "text": "Loves biryani."}, "id": "call_md", "type": "tool_call"}],
+            tool_calls=[{"name": "memory_update", "args": {"file": "identity.md", "action": "append", "text": "Loves biryani."}, "id": "call_bad", "type": "tool_call"}],
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "memory_update", "args": {"file": "identity", "action": "append", "text": "Loves biryani."}, "id": "call_ok", "type": "tool_call"}],
         ),
         AIMessage(content="Got it."),
     ]
     monkeypatch.setattr(chat_service, "get_chat_model", lambda *a, **k: FakeChatModel(responses))
 
     r = client.post(f"/api/chat/{cid}", json={"content": "remember I love biryani"})
-    output = r.json()["assistant_message"]["tool_calls"][0]["output"]
-    assert "Unknown memory file" not in output
-    assert output == "Saved a new memory to identity.md."  # clean name, not identity.md.md
+    tool_calls = r.json()["assistant_message"]["tool_calls"]
+    # the bad call surfaced a validation error; the good one wrote cleanly with no '.md'
+    bad = next(t for t in tool_calls if t["id"] == "call_bad")
+    ok = next(t for t in tool_calls if t["id"] == "call_ok")
+    assert "identity.md" in bad["output"] and "error" in bad["output"].lower()
+    assert ok["output"] == "Saved a new memory to identity."
     lines = client.get("/api/memory/identity").json()["lines"]
     assert any("biryani" in l["text"].lower() for l in lines)
 

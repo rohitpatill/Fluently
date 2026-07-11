@@ -1,5 +1,7 @@
 """Judge LLM: after each user message, detect target-word usage and apply scoring events."""
 
+from typing import Literal
+
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -16,7 +18,9 @@ CONTEXT_MESSAGES = 6
 
 class UsageJudgement(BaseModel):
     word: str = Field(description="The target word/phrase exactly as listed")
-    classification: str = Field(
+    classification: Literal[
+        "perfect_unprompted", "perfect_prompted", "awkward", "wrong"
+    ] = Field(
         description="One of: perfect_unprompted | perfect_prompted | awkward | wrong"
     )
     suggestion: str = Field(default="", description="For awkward/wrong: one short better-usage suggestion")

@@ -84,7 +84,7 @@ naturally into conversations, judges how well the user produces them, and tracks
 3. **Scoring matrix** (single source of truth: `scoring_service.py`):
    perfect_unprompted +5 | perfect_prompted +3 | awkward +1 | wrong −2 | passive +0.5 |
    decay −1/week after 14 idle days (lazy, on dashboard reads) | manual = user-set delta.
-   Daily cap: +10 per word per day. Score clamped 0–100.
+   No daily cap — gains apply in full (0→100 possible in one day). Score clamped 0–100.
 4. **Judge** — after every user message, a cheap judge LLM (structured output) classifies
    usage of ALL tracked words in that message and applies scoring events. Never blocks chat.
 5. **Dynamic system prompt** — assembled per LLM call in `prompt_builder.py`, order (deliberate
@@ -216,7 +216,7 @@ ENG/
             ├── prompt_builder.py   dynamic system prompt assembly
             ├── chat_service.py     manual tool-calling loop, history reconstruction, auto-title; resolves per-user model
             ├── judge_service.py    structured-output usage judging → scoring events; resolves per-user model
-            ├── scoring_service.py  scoring matrix, daily cap, lazy decay, spaced-repetition picker
+            ├── scoring_service.py  scoring matrix (no daily cap), lazy decay, spaced-repetition picker
             ├── topic_service.py    topic suggestions + word enrichment + onboarding structuring; all take user_id + resolve model
             ├── memory_service.py   free-text markdown engine over the Mongo memory_files collection (no ids/stamps; normalize_file tolerates .md)
             ├── search_service.py   BM25/regex search (ranking in Python) over Mongo-loaded messages, context windows

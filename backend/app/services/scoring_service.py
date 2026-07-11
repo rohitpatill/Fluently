@@ -11,7 +11,8 @@ which module the usage happened in:
   decay               -1/week after 14 idle days (applied lazily)
   manual              user-set delta from the dashboard
 
-Daily cap: a word can gain at most +10 per day, so one chat can't max it out.
+No daily cap: gains apply in full, so a word can go 0 -> 100 in a single day.
+Score is always clamped to 0-100 (0 = worst, 100 = mastered/excellence).
 """
 
 from datetime import datetime, timedelta, timezone
@@ -29,11 +30,6 @@ EVENT_DELTAS = {
 }
 
 
-def _gained_today(word_id: str) -> float:
-    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    return repo.gained_today(word_id, day_start, exclude_types=["manual"])
-
-
 def apply_event(
     word: Word,
     event_type: str,
@@ -46,9 +42,6 @@ def apply_event(
         delta = manual_delta or 0.0
     else:
         delta = EVENT_DELTAS[event_type]()
-        if delta > 0:
-            headroom = settings.score_daily_cap - _gained_today(word.id)
-            delta = max(0.0, min(delta, headroom))
 
     new_score = max(0.0, min(100.0, word.score + delta))
     actual_delta = new_score - word.score
