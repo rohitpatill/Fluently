@@ -278,9 +278,10 @@ export default function Chat({ personaName }) {
   async function removeThread(id) {
     try {
       await api.deleteConversation(id);
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
       if (activeId === id) setActiveId(null);
       setConfirmDeleteId(null);
+      queryClient.removeQueries({ queryKey: ['messages', id] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
     } catch (e) {
       toast.error(e.message);
     }
