@@ -6,7 +6,7 @@ import { Check, ChevronRight, Loader2, Pencil, Plus, Settings2, Trash2, UserPlus
 
 import * as api from '../api';
 import { usePersonaCatalog, usePersonas } from '../hooks/useApi';
-import { PersonaAvatar, Spinner } from './Shared';
+import { DiscoverCardSkeleton, PersonaAvatar, PersonaRowSkeleton, Skeleton } from './Shared';
 
 const RELATIONS = ['Best friend', 'Mentor', 'Girlfriend', 'Boyfriend', 'Teacher'];
 
@@ -323,8 +323,10 @@ function ManagePanel({ onClose }) {
 
   if (personas.isLoading) {
     return (
-      <div className="flex justify-center py-8">
-        <Spinner />
+      <div className="flex flex-col gap-3.5">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <PersonaRowSkeleton key={i} />
+        ))}
       </div>
     );
   }
@@ -505,9 +507,19 @@ function DiscoverPanel({ onUsed }) {
   }
 
   if (catalog.isLoading) {
+    // Content-shaped skeleton mirroring the real category → card grid (responsive 2/3/4 cols).
     return (
-      <div className="flex justify-center py-8">
-        <Spinner />
+      <div className="flex flex-col gap-6">
+        {[4, 4].map((count, ci) => (
+          <div key={ci}>
+            <Skeleton className="h-2.5 w-28 rounded-md mb-3" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 items-start">
+              {Array.from({ length: count }).map((_, i) => (
+                <DiscoverCardSkeleton key={i} />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }

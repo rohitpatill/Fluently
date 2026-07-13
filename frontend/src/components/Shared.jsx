@@ -159,6 +159,37 @@ export function StatCardSkeleton() {
   );
 }
 
+// Matches a Discover catalog card: circular avatar + name line + relation line, centered.
+export function DiscoverCardSkeleton() {
+  return (
+    <div className="rounded-[18px] border border-border bg-surface flex flex-col items-center gap-2.5 px-3 py-4">
+      <Skeleton className="w-[72px] h-[72px] rounded-full" />
+      <Skeleton className="h-3.5 w-[70%] rounded-md" />
+      <Skeleton className="h-2.5 w-[45%] rounded-md" />
+    </div>
+  );
+}
+
+// Matches a "Your personas" row: avatar + name/relation/count lines + a couple of action pills.
+export function PersonaRowSkeleton() {
+  return (
+    <div className="bg-surface border border-border rounded-[18px] p-4 sm:p-5">
+      <div className="flex items-center gap-4">
+        <Skeleton className="w-16 h-16 rounded-full shrink-0" />
+        <div className="flex-1 min-w-0">
+          <Skeleton className="h-4 w-[45%] rounded-md" />
+          <Skeleton className="h-3 w-[30%] rounded-md mt-2" />
+          <Skeleton className="h-2.5 w-[22%] rounded-md mt-2" />
+        </div>
+      </div>
+      <div className="flex gap-2 mt-4">
+        <Skeleton className="h-8 w-32 rounded-xl" />
+        <Skeleton className="h-8 w-20 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
 // Matches the memory markdown block: a few lines of varying width.
 export function MemoryEditorSkeleton() {
   const widths = ['85%', '70%', '92%', '55%', '78%', '40%'];
