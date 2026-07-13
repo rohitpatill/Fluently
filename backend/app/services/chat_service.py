@@ -75,7 +75,11 @@ def run_agent_turn(
     # Resolve THIS user's chosen model + key (Swift/Sage). Governs every call this turn.
     resolved = resolve_for_user(conversation.user_id)
 
-    tools = build_tools(current_conversation_id=conversation.id, user_id=conversation.user_id)
+    tools = build_tools(
+        current_conversation_id=conversation.id,
+        user_id=conversation.user_id,
+        persona_id=conversation.persona_id,
+    )
     tool_map = {t.name: t for t in tools}
     llm = get_chat_model(
         provider or resolved.provider,

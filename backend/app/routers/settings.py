@@ -41,13 +41,18 @@ def purge_all(payload: PurgeAllRequest, user_id: str = Depends(get_current_user)
     so onboarding restarts from the very beginning (persona → about → 'How smart should I be?').
     keep_words=True leaves the model config intact (you keep practicing your words right away)."""
     n_conv, n_msg = repo.purge_conversations(user_id)
+    # Both reset flows wipe the companion entirely (the UI copy promises this) — delete ALL
+    # personas so the app restarts at onboarding, which recreates exactly one.
+    repo.purge_personas(user_id)
     n_words = 0
     cleared_model = False
     if not payload.keep_words:
         n_words = repo.purge_words(user_id)
         repo.clear_user_model(user_id)
         cleared_model = True
-    for f in ("identity", "memory", "persona"):
+    # identity/memory are the shared human files; persona lived in the personas collection
+    # (already purged above).
+    for f in ("identity", "memory"):
         memory_service.reset_file(f, user_id)
     return {
         "deleted_conversations": n_conv,

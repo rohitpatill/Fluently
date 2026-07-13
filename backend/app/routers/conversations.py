@@ -13,14 +13,16 @@ from ..schemas import (
     TopicSuggestion,
     WordEventOut,
 )
-from ..services import chat_service, scoring_service, search_service, topic_service
+from ..services import chat_service, memory_service, scoring_service, search_service, topic_service
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
 @router.get("", response_model=list[ConversationOut])
 def list_conversations(user_id: str = Depends(get_current_user)):
-    return repo.list_conversations(user_id)
+    # Threads are persona-scoped: only show conversations of the ACTIVE persona.
+    persona_id = memory_service.active_persona_id(user_id)
+    return repo.list_conversations(user_id, persona_id=persona_id)
 
 
 @router.post("", response_model=NewConversationResponse)
@@ -29,12 +31,14 @@ def create_conversation(
 ):
     """Start a new chat: pick target words (spaced repetition), optionally suggest topics.
     The first LLM call of a new chat is the topic-suggestion call, as designed."""
+    persona_id = memory_service.active_persona_id(user_id)
     targets = scoring_service.pick_target_words(user_id=user_id)
     conv = Conversation(
         category=payload.category,
         title=payload.title or "New conversation",
         target_word_ids=[w.id for w in targets],
         user_id=user_id,
+        persona_id=persona_id,
     )
     repo.insert_conversation(conv)
 
@@ -42,7 +46,7 @@ def create_conversation(
     if payload.suggest_topics and not payload.category:
         topics = [
             TopicSuggestion(title=t.title, description=t.description, category=t.category)
-            for t in topic_service.suggest_topics(targets, user_id)
+            for t in topic_service.suggest_topics(targets, user_id, persona_id=persona_id)
         ]
     return NewConversationResponse(conversation=conv, topics=topics)
 
@@ -126,6 +130,7 @@ def search_conversations(
         full_conversation=payload.full_conversation,
         max_results=payload.max_results,
         user_id=user_id,
+        persona_id=memory_service.active_persona_id(user_id),
     )
     return [
         SearchHit(

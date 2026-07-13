@@ -8,11 +8,11 @@ const NAV = [
   { key: 'memory', label: 'Memory', Icon: NotebookText },
 ];
 
-export default function Rail({ view, setView, personaName, userName, me, hidden = false }) {
+export default function Rail({ view, setView, personaName, personaAvatar = '', userName, me, hidden = false }) {
   return (
     <div className={`fixed inset-x-0 bottom-0 z-40 h-[76px] bg-[#FDFDFE]/95 border-t border-border items-center justify-around px-3 shadow-[0_-10px_28px_-24px_rgba(26,29,39,.35)] backdrop-blur md:static md:w-[68px] md:h-auto md:border-t-0 md:border-r md:flex-col md:justify-start md:pt-[18px] md:pb-4 md:gap-1.5 md:shadow-none md:backdrop-blur-none shrink-0 ${hidden ? 'hidden md:flex' : 'flex'}`}>
       <div className="hidden md:block md:mb-[18px]">
-        <PersonaAvatar name={personaName} size="sm" />
+        <PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="sm" />
       </div>
       {NAV.map(({ key, label, Icon }) => (
         <button

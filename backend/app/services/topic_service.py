@@ -29,10 +29,13 @@ class WordEnrichment(BaseModel):
     register_notes: str = Field(description="formal/informal/neutral + context warnings")
 
 
-def suggest_topics(target_words: list[Word], user_id: str = DEFAULT_USER_ID) -> list[Topic]:
+def suggest_topics(target_words: list[Word], user_id: str = DEFAULT_USER_ID,
+                   persona_id: str | None = None) -> list[Topic]:
     identity = memory_service.read_file("identity", user_id)[:3000]
     memory = memory_service.read_file("memory", user_id)[:3000]
-    recent = repo.recent_conversations(user_id, limit=8)
+    # Only surface conversations held with the ACTIVE persona (keeps each companion's context
+    # separate — a mentor shouldn't reference chats you had with a best-friend persona).
+    recent = repo.recent_conversations(user_id, limit=8, persona_id=persona_id)
     recent_titles = "\n".join(f"- {c.title}" for c in recent) or "(no previous conversations)"
     words = ", ".join(w.text for w in target_words) or "(none)"
 

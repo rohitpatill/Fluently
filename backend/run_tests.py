@@ -45,6 +45,7 @@ AREAS = {
     "conversations": ("test_conversations", "Conversations + search (BM25/regex, windows)"),
     "chat": ("test_chat", "Chat flow (tool loop, history, judge, title)"),
     "model": ("test_model", "Model config (BYO key, tiers, verify/encrypt, gate)"),
+    "personas": ("test_personas", "Personas (multi-persona CRUD, scoping, switch, delete)"),
     "dashboard": ("test_dashboard", "Dashboard & health"),
     "settings": ("test_settings", "Settings / data purge"),
     "live": ("test_live_smoke", "LIVE provider smoke (real LLM)"),

@@ -10,7 +10,7 @@ import Words from './components/Words';
 import Memory from './components/Memory';
 import SettingsView from './components/SettingsView';
 import { FullScreenError, FullScreenLoader } from './components/Shared';
-import { useHealth, useMe, useMemoryFile, usePersonaMemory } from './hooks/useApi';
+import { useHealth, useMe, useMemoryFile, usePersonaMemory, usePersonas } from './hooks/useApi';
 import useKeyboardInset from './hooks/useKeyboardInset';
 import { parseIdentityName, parsePersonaName } from './utils';
 
@@ -26,6 +26,7 @@ export default function App() {
   const authed = !!me.data;
   const persona = usePersonaMemory({ enabled: authed });
   const identity = useMemoryFile('identity', { enabled: authed });
+  const personas = usePersonas({ enabled: authed });
 
   if (health.isError) {
     return (
@@ -80,12 +81,16 @@ export default function App() {
 
   if (persona.isLoading) return <FullScreenLoader label="Waking things up…" />;
 
-  const personaName = parsePersonaName(persona.data?.raw) || me.data.name || 'your companion';
+  const activePersona = (personas.data || []).find((p) => p.is_active);
+  const personaId = activePersona?.id || null;
+  const personaName =
+    activePersona?.name || parsePersonaName(persona.data?.raw) || me.data.name || 'your companion';
+  const personaAvatar = activePersona?.avatar_url || '';
   const userName = parseIdentityName(identity.data?.raw) || me.data.name;
 
   return (
     <div className="h-dvh min-h-0 flex flex-col md:flex-row animate-fade-in">
-      <Rail view={view} setView={setView} personaName={personaName} userName={userName} me={me.data} hidden={keyboardOpen} />
+      <Rail view={view} setView={setView} personaName={personaName} personaAvatar={personaAvatar} userName={userName} me={me.data} hidden={keyboardOpen} />
       <div className={`flex-1 min-w-0 min-h-0 h-full md:pb-0 ${keyboardOpen ? 'pb-0' : 'pb-[76px]'}`}>
         <AnimatePresence mode="wait">
           <motion.div
@@ -96,7 +101,7 @@ export default function App() {
             transition={{ duration: 0.18 }}
             className="h-full"
           >
-            {view === 'chat' && <Chat personaName={personaName} />}
+            {view === 'chat' && <Chat personaName={personaName} personaAvatar={personaAvatar} personaId={personaId} />}
             {view === 'words' && <Words />}
             {view === 'memory' && <Memory personaName={personaName} />}
             {view === 'settings' && <SettingsView personaName={personaName} me={me.data} />}

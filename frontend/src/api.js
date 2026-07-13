@@ -111,6 +111,32 @@ export const putPersonaForm = (data) =>
 export const submitOnboarding = (name, about) =>
   request('/api/memory/onboarding', { method: 'POST', body: JSON.stringify({ name, about }) });
 
+// ---------- Personas (multi-persona) ----------
+export const listPersonas = () => request('/api/personas');
+
+export const createPersona = (data) =>
+  request('/api/personas', { method: 'POST', body: JSON.stringify(data) });
+
+export const editPersona = (id, data) =>
+  request(`/api/personas/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const setPersonaAvatar = (id, avatarUrl) =>
+  request(`/api/personas/${id}/avatar`, {
+    method: 'PUT',
+    body: JSON.stringify({ avatar_url: avatarUrl }),
+  });
+
+export const activatePersona = (id) =>
+  request(`/api/personas/${id}/activate`, { method: 'POST' });
+
+export const deletePersona = (id) => request(`/api/personas/${id}`, { method: 'DELETE' });
+
+// Discover: curated public-persona catalog + "use" (copies one into the user's personas).
+export const getPersonaCatalog = () => request('/api/personas/catalog');
+
+export const usePersonaFromCatalog = (catalogId) =>
+  request(`/api/personas/catalog/${catalogId}/use`, { method: 'POST' });
+
 // ---------- Model (bring-your-own-key + Swift/Sage tiers) ----------
 export const getModelTiers = () => request('/api/model/tiers');
 

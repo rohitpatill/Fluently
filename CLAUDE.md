@@ -64,8 +64,18 @@ naturally into conversations, judges how well the user produces them, and tracks
 
 ## Core concepts
 
-1. **Persona** — the user assigns the system an identity at onboarding (name, relation
-   e.g. best friend/mentor, personality, speaking style). Stored in `persona.md`.
+1. **Persona (multi-persona)** — the user assigns the system an identity at onboarding (name,
+   relation e.g. best friend/mentor, personality, speaking style, optional public-URL avatar).
+   A user may keep **several personas** and switch the active one (`User.active_persona_id`);
+   each persona is a doc in the `personas` collection holding its own markdown (identity fields
+   + its own `## Relationship memories`). `identity`+`memory` (the human) are SHARED across all
+   personas — only the companion changes. **Chats are persona-scoped** (a conversation carries a
+   `persona_id`; listing + agent conversation-search + opener/topic context filter to the active
+   persona), but words/scores are global. Managed in Settings → Personas (a summary card → a
+   full-screen Manage overlay with "Your personas" + a **Discover** tab of curated public figures
+   from `backend/app/assets/personas.json` — "use" COPIES one into the user's editable personas).
+   Deleting a persona cascades its chats (keeps words); the last one can't be deleted. Migration
+   for pre-multipersona users: `backend/migrate_personas.py`.
 2. **Memory files** (documents in the Mongo `memory_files` collection — one per (user, file);
    NOT on-disk files anymore — editable by the agent via tools):
    - `identity` — timeless facts about the user (who they are, background, personality,
@@ -75,7 +85,10 @@ naturally into conversations, judges how well the user produces them, and tracks
      Time-bound entries carry an ABSOLUTE date written by the agent inside the text itself
      (e.g. "Demo on 2026-07-17.") — never "tomorrow"/"next week".
    - `persona` — what the persona remembers about ITS relationship with the user (shared
-     jokes, promises, moments), written first-person, never repeating its own name.
+     jokes, promises, moments), written first-person, never repeating its own name. NOTE:
+     `identity`+`memory` live in `memory_files`; the `persona` "file" is PER-PERSONA — it routes
+     to the ACTIVE persona's `content` in the `personas` collection (see concept 1). Callers use
+     `memory_service.read_file("persona", uid)` unchanged; it resolves the active persona.
    Each doc holds the whole markdown string. Pure free-text — NO line IDs, NO machine-added
    stamps. The agent writes exactly what should be stored; the single `memory_update(file, action)`
    tool edits by `action='append'` (new text) or `action='edit'` (`old_string`→`new_string`,
@@ -170,11 +183,12 @@ ENG/
 │           ├── Login.jsx       auth gate — single "Continue with Google" screen (Fluently-styled)
 │           ├── Onboarding.jsx  3-step flow: persona → about you → BrainStep (key + Swift/Sage tier); exports BrainStep (reused by App's model gate)
 │           ├── Rail.jsx        responsive nav — desktop left rail; mobile bottom bar; 3 main tabs + Settings
-│           ├── Chat.jsx        desktop threads sidebar / mobile slide-out conversations drawer, topic cards, opener, messages, scoring chips, dev tools, composer
+│           ├── Chat.jsx        desktop threads sidebar / mobile slide-out drawer, topic cards, opener, messages, scoring chips, dev tools, composer; persona-scoped conversation cache + stale-activeId guard
 │           ├── Words.jsx       stats cards, add+enrich, score bars, responsive rows, expandable detail with mobile-visible note edit
 │           ├── Memory.jsx      3 RAW markdown editors (identity/memory/persona) with Save → PUT .../raw
-│           ├── SettingsView.jsx Account profile + Log out, Brain (Swift/Sage switch + replace-key), Developer-mode toggle, data-management hard-delete cards
-│           └── Shared.jsx      PersonaAvatar, Spinner, loaders, error screen, ScoreBar, TierCard (Swift/Sage brain card)
+│           ├── SettingsView.jsx Account + Log out, Personas (summary card), Brain (Swift/Sage switch + replace-key), Developer-mode toggle, data-management hard-delete cards
+│           ├── Personas.jsx    multi-persona: summary card → full-screen Manage overlay (Your personas: switch/edit/delete/add; Discover: curated catalog cards → copy). Responsive sheet
+│           └── Shared.jsx      PersonaAvatar (+ optional avatarUrl image), Spinner, loaders, error screen, ScoreBar, TierCard (Swift/Sage brain card)
 └── backend/
     ├── requirements.txt  (+ google-auth, PyJWT, itsdangerous for OAuth/session; cryptography for key encryption)
     ├── .env.example     ← copy to .env and fill ENCRYPTION_KEY + Google OAuth client id/secret + session secrets + MONGODB_URI
@@ -186,24 +200,28 @@ ENG/
     │                      test_auth (OAuth flow + first-user adoption + data isolation),
     │                      test_memory, test_words, test_scoring, test_conversations, test_chat,
     │                      test_model (BYO key/tiers/verify+encrypt/gate),
+    │                      test_personas (multi-persona CRUD/scoping/switch/delete/Discover),
     │                      test_dashboard, test_settings, test_mongo_connection (@live),
     │                      test_live_smoke (@pytest.mark.live)
     ├── import_sqlite_to_mongo.py  ← one-time SQLite→Mongo migration script (id remap; --commit/--wipe)
+    ├── migrate_personas.py  ← one-time single→multi-persona migration (legacy persona doc → Persona row + backfill conversation persona_id; --commit)
     ├── data/            ← legacy pre-migration BACKUP only (old eng.db + .md files); app no longer uses it
     └── app/
-        ├── main.py              FastAPI app, CORS (credentials on), routers (incl. auth, model), startup (mongo ping → ensure_indexes; memory bootstrap is per-user on login)
+        ├── main.py              FastAPI app, CORS (credentials on), routers (incl. auth, model, personas), startup (mongo ping → ensure_indexes; memory bootstrap is per-user on login)
         ├── config.py            pydantic-settings: encryption_key, legacy model choices, scoring constants, user_timezone, mongodb_uri/db, Google-OAuth + session settings; MODEL_TIERS (Swift/Sage source of truth) + tier_config
-        ├── mongo.py             MongoDB connection (PyMongo), collection accessors (incl. users_col), ensure_indexes (incl. uq_google_sub), DEFAULT_USER_ID
-        ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here); incl. user upsert + first-login adoption + set_user_key/set_user_tier/clear_user_model
-        ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids): Conversation, Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id), User (google_sub/email/name/picture/encrypted_api_key/model_tier)
+        ├── assets/personas.json  curated public-persona "Discover" catalog (categories → figures; manually-filled avatar_url); read-only, copied into a user's personas on "use"
+        ├── mongo.py             MongoDB connection (PyMongo), collection accessors (incl. users_col, personas_col), ensure_indexes (incl. uq_google_sub, personas index), DEFAULT_USER_ID
+        ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here); incl. user upsert + first-login adoption + model config + persona CRUD/activate/purge + persona-scoped conversation queries
+        ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids): Conversation (+persona_id), Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id), User (…/encrypted_api_key/model_tier/active_persona_id), Persona (content + avatar_url)
         ├── deps.py              FastAPI auth deps: get_current_user (cookie→user_id, 401 else), get_current_user_obj (→ profile), require_model_configured (403 if no key/tier — LLM routes)
-        ├── schemas.py           all Pydantic request/response models (MeResponse [+has_key/tier], ModelTierOut/ModelStatusOut/SetKeyRequest/SetTierRequest)
+        ├── schemas.py           all Pydantic request/response models (MeResponse [+has_key/tier], model-config schemas, Persona/PersonaCreate/PersonaOut/Catalog* schemas)
         ├── prompts.py           ALL prompt templates (chat system, judge, topics, enrich, onboarding-structure, title, opener)
         ├── routers/
         │   ├── auth.py          Google OAuth + session: /api/auth/google/login + /callback, /me, /logout
         │   ├── model.py         BYO-key model config: GET /tiers + /status, POST /key (verify+encrypt+store), PUT /tier
+        │   ├── personas.py      multi-persona CRUD + activate + delete(cascade) + GET /catalog & POST /catalog/{id}/use (Discover copy)
         │   ├── chat.py          POST /api/chat/{conversation_id} — full turn + judge scoring (gated: require_model_configured)
-        │   ├── conversations.py CRUD + topic suggestions + opener + POST /api/conversations/search (create/opener gated)
+        │   ├── conversations.py CRUD (persona-scoped list) + topic suggestions + opener + POST /api/conversations/search (create/opener gated)
         │   ├── words.py         CRUD + LLM enrichment on add + manual adjust + event history + PUT /note (user hook)
         │   ├── memory.py        read/append/edit (old_string->new_string) memory files + PUT persona/form + POST onboarding (LLM-structured)
         │   ├── settings.py      data-management hard deletes (purge-all full-wipe also clears model key+tier)
@@ -217,8 +235,9 @@ ENG/
             ├── chat_service.py     manual tool-calling loop, history reconstruction, auto-title; resolves per-user model
             ├── judge_service.py    structured-output usage judging → scoring events; resolves per-user model
             ├── scoring_service.py  scoring matrix (no daily cap), lazy decay, spaced-repetition picker
-            ├── topic_service.py    topic suggestions + word enrichment + onboarding structuring; all take user_id + resolve model
-            ├── memory_service.py   free-text markdown engine over the Mongo memory_files collection (no ids/stamps; normalize_file tolerates .md)
+            ├── topic_service.py    topic suggestions (persona-scoped recents) + word enrichment + onboarding structuring; all take user_id + resolve model
+            ├── persona_catalog.py  loads/caches assets/personas.json (Discover catalog); categories()/get_entry()
+            ├── memory_service.py   free-text markdown engine; identity/memory in memory_files, persona routes to the ACTIVE persona doc (self-heals/migrates); active_persona_id/build_persona_content/parse_persona_fields
             ├── search_service.py   BM25/regex search (ranking in Python) over Mongo-loaded messages, context windows
             └── agent_tools.py      LangChain @tool definitions (closure over user_id, not a db session)
 ```
@@ -227,7 +246,8 @@ ENG/
 
 - **Auth:** `GET /api/auth/google/login` (→ Google consent), `GET /api/auth/google/callback` (verify → session cookie → redirect to frontend; failure → `frontend_url/?auth_error=1`), `GET /api/auth/me` (profile + `has_persona` + `has_key`/`tier`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires the session cookie (401 without it) and is scoped to that user.
 - **Model (BYO key):** `GET /api/model/tiers` (Swift/Sage catalogue), `GET /api/model/status` (`{has_key, tier}`, never the key), `POST /api/model/key` (`{api_key, tier}` → verify → encrypt → store; 400 on bad key), `PUT /api/model/tier` (`{tier}` switch). LLM-using routes (`POST /api/chat/...`, `POST /api/conversations`, `.../opener`) return **403** if the user has no key/tier yet.
-- `POST /api/conversations` — new chat; picks target words; returns topic suggestions (first LLM call of a new chat)
+- **Personas (multi-persona):** `GET /api/personas` (list, each with `is_active`/`conversation_count`), `POST /api/personas` (create), `PUT /api/personas/{id}` (edit), `PUT /api/personas/{id}/avatar` (public URL), `POST /api/personas/{id}/activate` (switch), `DELETE /api/personas/{id}` (delete + cascade its chats; keeps ≥1). Discover: `GET /api/personas/catalog` + `POST /api/personas/catalog/{catalog_id}/use` (copy a curated figure into the user's personas).
+- `POST /api/conversations` — new chat (scoped to the active persona); picks target words; returns topic suggestions (first LLM call of a new chat)
 - `PATCH /api/conversations/{id}/category` — set topic after user picks one
 - `POST /api/conversations/{id}/opener` — persona opens the chat itself (time/memory aware)
 - `GET /api/conversations` / `GET .../{id}` / `GET .../{id}/messages` (each msg has `tool_calls`; user msgs also carry `word_events` so chips + dev-mode tool calls survive refresh) / `DELETE .../{id}`
@@ -261,8 +281,10 @@ per-user model) → 7. judge user message (same per-user model) → scoring even
   swappable data layer — services/routers never touch pymongo). `app/mongo.py` owns the client,
   collections, and indexes. IDs are ObjectId hex STRINGS end-to-end. Every data doc has a `user_id`
   (a real Google user's id; `"default"` only tags un-adopted legacy data); words are unique per
-  `(user_id, text)`. The 3 memory files live in the `memory_files` collection; users in the
-  `users` collection. `data/` is now just a legacy backup; the app never reads it.
+  `(user_id, text)`. The `identity`+`memory` files live in the `memory_files` collection; each
+  **persona** is a doc in the `personas` collection (its own markdown + avatar); users in the
+  `users` collection (carry `active_persona_id`); conversations carry a `persona_id`. `data/` is
+  now just a legacy backup; the app never reads it.
 - Auth: Google OAuth only, server-side code flow, stateless JWT session cookie. Routers resolve
   the user via `Depends(get_current_user)` (`app/deps.py`) — NEVER hardcode a user id. Store NO
   Google tokens. Any new persisted auth state (e.g. a future `token_version` for revocation) goes

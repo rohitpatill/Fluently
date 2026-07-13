@@ -188,6 +188,52 @@ class PersonaForm(BaseModel):
     gender: str = ""
     personality: str = ""  # free-text custom box
     speaking_style: str = ""
+    avatar_url: str = ""  # optional PUBLIC image URL for the companion's avatar
+
+
+# ---------- Personas (multi-persona management) ----------
+class PersonaOut(BaseModel):
+    id: str
+    name: str
+    relation: str = ""
+    gender: str = ""
+    personality: str = ""
+    speaking_style: str = ""
+    avatar_url: str = ""
+    is_active: bool = False
+    conversation_count: int = 0
+    created_at: datetime
+
+
+class PersonaCreate(BaseModel):
+    """Create a new companion. Same shape as onboarding's persona form (avatar optional)."""
+    name: str
+    relation: str
+    gender: str = ""
+    personality: str = ""
+    speaking_style: str = ""
+    avatar_url: str = ""
+
+
+class PersonaAvatarUpdate(BaseModel):
+    avatar_url: str  # public image URL; empty clears it (falls back to gradient initial)
+
+
+# ---------- Persona catalog (curated public personas, "Discover") ----------
+class CatalogPersona(BaseModel):
+    id: str  # stable catalog id (NOT a db id)
+    name: str
+    relation: str = ""
+    gender: str = ""
+    speaking_style: str = ""
+    avatar_url: str = ""
+    description: str = ""
+
+
+class CatalogCategory(BaseModel):
+    key: str
+    label: str
+    personas: list[CatalogPersona]
 
 
 # ---------- Search ----------

@@ -146,10 +146,10 @@ function ToolCalls({ calls }) {
   );
 }
 
-function TypingIndicator({ personaName }) {
+function TypingIndicator({ personaName, personaAvatar }) {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 items-center">
-      <PersonaAvatar name={personaName} size="xs" />
+      <PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="xs" />
       <div className="bg-surface border border-border rounded-[4px_18px_18px_18px] px-4 py-3 flex gap-1.5 items-center">
         {[0, 0.2, 0.4].map((d) => (
           <span key={d} className="w-1.5 h-1.5 rounded-full bg-[#9CA1B0] animate-dot-pulse" style={{ animationDelay: `${d}s` }} />
@@ -160,9 +160,9 @@ function TypingIndicator({ personaName }) {
   );
 }
 
-export default function Chat({ personaName }) {
+export default function Chat({ personaName, personaAvatar = '', personaId = null }) {
   const queryClient = useQueryClient();
-  const conversations = useConversations();
+  const conversations = useConversations(personaId);
   const [devMode] = useDevMode();
 
   const [activeId, setActiveId] = useState(null);
@@ -186,10 +186,26 @@ export default function Chat({ personaName }) {
     return () => clearInterval(t);
   }, []);
 
-  // auto-select most recent conversation on first load
+  // Keep activeId consistent with the (persona-scoped) conversation list:
+  //  - first load / after a switch to a persona that HAS chats: auto-select the newest;
+  //  - if the open chat is no longer in the list (persona switched, or it was deleted):
+  //    drop the stale selection so the main pane never shows another persona's / a deleted
+  //    chat. We wait for the list to finish loading so a mid-fetch empty array doesn't
+  //    transiently clear a still-valid selection.
   useEffect(() => {
-    if (activeId == null && conversations.data?.length) setActiveId(conversations.data[0].id);
-  }, [conversations.data, activeId]);
+    if (conversations.isLoading || !conversations.data) return;
+    const list = conversations.data;
+    if (activeId == null) {
+      if (list.length) setActiveId(list[0].id);
+      return;
+    }
+    if (!list.some((c) => c.id === activeId)) {
+      // Stale selection: clear it (+ any optimistic bubbles) and fall back to the newest.
+      setActiveId(list.length ? list[0].id : null);
+      setPendingUser(null);
+      setTyping(false);
+    }
+  }, [conversations.data, conversations.isLoading, activeId]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -386,7 +402,7 @@ export default function Chat({ personaName }) {
             >
               <div className="px-4 mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">
-                  <PersonaAvatar name={personaName} size="sm" online />
+                  <PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="sm" online />
                   <div className="min-w-0">
                     <div className="text-[15px] font-bold truncate">{personaName}</div>
                     <div className="text-[12px] text-muted">conversations</div>
@@ -471,14 +487,14 @@ export default function Chat({ personaName }) {
             onClick={() => setThreadsOpen(true)}
             className="md:hidden flex items-center gap-3 min-w-0 bg-transparent border-none p-0 text-left cursor-pointer"
           >
-            <PersonaAvatar name={personaName} size="sm" online />
+            <PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="sm" online />
             <div className="min-w-0">
               <div className="text-[15px] font-bold truncate">{personaName}</div>
               <div className="text-[12px] text-muted truncate">tap for conversations</div>
             </div>
           </button>
           <div className="hidden md:flex items-center gap-3.5">
-            <PersonaAvatar name={personaName} size="md" online />
+            <PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="md" online />
             <div>
               <div className="text-[15.5px] font-bold">{personaName}</div>
               <div className="text-[12.5px] text-muted">always here to talk</div>
@@ -490,7 +506,7 @@ export default function Chat({ personaName }) {
         {activeId == null ? (
           /* no conversation selected */
           <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 text-center">
-            <PersonaAvatar name={personaName} size="xl" />
+            <PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="xl" />
             <h2 className="m-0 text-2xl font-bold">{greeting}</h2>
             <p className="m-0 text-muted font-serif-italic">Start a conversation with {personaName}.</p>
             <button
@@ -505,7 +521,7 @@ export default function Chat({ personaName }) {
           /* topic cards */
           <div className="flex-1 flex flex-col items-center justify-start md:justify-center px-4 sm:px-6 md:px-12 py-7 gap-6 md:gap-7 overflow-y-auto">
             <div className="flex flex-col items-center text-center">
-              <div className="mb-4 flex justify-center"><PersonaAvatar name={personaName} size="lg" /></div>
+              <div className="mb-4 flex justify-center"><PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="lg" /></div>
               <h2 className="m-0 text-[26px] font-bold tracking-tight">{greeting}</h2>
               <p className="mt-2 mb-0 text-[15px] text-muted font-serif-italic">Pick a topic below, or start typing whatever's on your mind.</p>
             </div>
@@ -546,7 +562,7 @@ export default function Chat({ personaName }) {
             {msgs.map((m) =>
               m.role === 'assistant' ? (
                 <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5 md:gap-3 max-w-full md:max-w-[640px]">
-                  <div className="mt-1"><PersonaAvatar name={personaName} size="xs" /></div>
+                  <div className="mt-1"><PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="xs" /></div>
                   <div className="min-w-0">
                     <div className="bg-surface border border-border rounded-[4px_18px_18px_18px] px-4 py-3 md:px-4.5 text-[14px] md:text-[14.5px] leading-relaxed text-text-2 shadow-[0_3px_10px_-6px_rgba(26,29,39,.1)] break-words [&_p]:m-0 [&_p+p]:mt-2">
                       <ReactMarkdown>{m.content}</ReactMarkdown>
@@ -574,7 +590,7 @@ export default function Chat({ personaName }) {
                 </div>
               </motion.div>
             )}
-            <AnimatePresence>{typing && <TypingIndicator personaName={personaName} />}</AnimatePresence>
+            <AnimatePresence>{typing && <TypingIndicator personaName={personaName} personaAvatar={personaAvatar} />}</AnimatePresence>
           </div>
         )}
 

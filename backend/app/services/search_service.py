@@ -34,11 +34,13 @@ def search(
     max_results: int = 5,
     exclude_conversation_id: str | None = None,
     user_id: str = DEFAULT_USER_ID,
+    persona_id: str | None = None,
 ) -> list[dict]:
     messages: list[Message] = repo.all_messages(
         user_id=user_id,
         conversation_id=conversation_id,
         exclude_conversation_id=exclude_conversation_id,
+        persona_id=persona_id,
     )
     if not messages:
         return []

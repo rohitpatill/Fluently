@@ -28,9 +28,13 @@ export function usePersonaMemory({ enabled = true } = {}) {
   });
 }
 
-export function useConversations() {
+// Persona-scoped key: switching the active persona reads a DIFFERENT cache entry, so the
+// previous persona's list can never briefly flash before the refetch. Invalidating the bare
+// ['conversations'] prefix still refreshes every persona's list (prefix match), so existing
+// invalidations keep working unchanged.
+export function useConversations(personaId) {
   return useQuery({
-    queryKey: ['conversations'],
+    queryKey: ['conversations', personaId ?? null],
     queryFn: api.listConversations,
   });
 }
@@ -70,6 +74,24 @@ export function useMemoryFile(file, { enabled = true } = {}) {
     queryKey: ['memory', file],
     queryFn: () => api.getMemory(file),
     enabled,
+  });
+}
+
+export function usePersonas({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['personas'],
+    queryFn: api.listPersonas,
+    enabled,
+  });
+}
+
+// The curated Discover catalog — static per deployment, cache aggressively.
+export function usePersonaCatalog({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['persona-catalog'],
+    queryFn: api.getPersonaCatalog,
+    enabled,
+    staleTime: Infinity,
   });
 }
 

@@ -31,7 +31,7 @@ from app.main import app
 from app.models import User
 from app.services import chat_service, judge_service, memory_service, model_service, topic_service
 
-_COLLECTIONS = ["conversations", "messages", "words", "word_events", "memory_files", "users"]
+_COLLECTIONS = ["conversations", "messages", "words", "word_events", "memory_files", "users", "personas"]
 
 # A stable, fixed user that the default `client` fixture is authenticated as. Existing
 # router tests then run scoped to this user without needing a real Google login.

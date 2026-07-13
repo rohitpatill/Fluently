@@ -63,6 +63,10 @@ def users_col():
     return get_db()["users"]
 
 
+def personas_col():
+    return get_db()["personas"]
+
+
 def ping() -> dict:
     """Cheap round-trip to verify the cluster is reachable. Returns server 'ok'."""
     return get_client().admin.command("ping")
@@ -97,3 +101,10 @@ def ensure_indexes() -> None:
     # that scopes every other collection. google_sub is the natural key from Google.
     users_col().create_index([("google_sub", ASCENDING)], unique=True, name="uq_google_sub")
     users_col().create_index([("email", ASCENDING)], name="user_email")
+
+    # personas: one doc per (user, companion identity). A user may keep several personas and
+    # switch the active one (User.active_persona_id). Each persona owns its OWN markdown
+    # content (identity fields + its own relationship memories). Listed most-recent-first.
+    personas_col().create_index(
+        [("user_id", ASCENDING), ("created_at", ASCENDING)], name="user_persona_created"
+    )

@@ -67,7 +67,8 @@ class AdjustScoreArgs(BaseModel):
     reason: str = Field(description="One short sentence: why you adjusted it")
 
 
-def build_tools(current_conversation_id: str | None = None, user_id: str = DEFAULT_USER_ID):
+def build_tools(current_conversation_id: str | None = None, user_id: str = DEFAULT_USER_ID,
+                persona_id: str | None = None):
     @tool(args_schema=MemoryUpdateArgs)
     def memory_update(
         file: str,
@@ -118,7 +119,7 @@ def build_tools(current_conversation_id: str | None = None, user_id: str = DEFAU
         full_conversation: bool = False,
         max_results: int = 3,
     ) -> str:
-        """Search all PAST conversations with the user for relevant context. Use when the user references something discussed before, or when past context would improve your reply. Returns matched messages with surrounding context."""
+        """Search all PAST conversations you had with the user for relevant context. Use when the user references something discussed before, or when past context would improve your reply. Returns matched messages with surrounding context. (Only searches conversations you had with the user under your current identity.)"""
         hits = search_service.search(
             query=query,
             mode=mode,
@@ -128,6 +129,7 @@ def build_tools(current_conversation_id: str | None = None, user_id: str = DEFAU
             max_results=max_results,
             exclude_conversation_id=current_conversation_id,
             user_id=user_id,
+            persona_id=persona_id,
         )
         return search_service.format_hits_for_llm(hits)
 

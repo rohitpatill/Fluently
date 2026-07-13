@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { RefreshCw, Zap, Sparkles, Check } from 'lucide-react';
 import { initial } from '../utils';
 
-export function PersonaAvatar({ name, size = 'md', online = false }) {
+export function PersonaAvatar({ name, size = 'md', online = false, avatarUrl = '' }) {
   const sizes = {
     xs: 'w-[30px] h-[30px] text-sm',
     sm: 'w-[34px] h-[34px] text-base',
@@ -12,11 +12,32 @@ export function PersonaAvatar({ name, size = 'md', online = false }) {
   };
   return (
     <div className="relative shrink-0">
-      <div
-        className={`${sizes[size]} rounded-full bg-linear-to-br from-accent to-[#9AA6F5] text-white flex items-center justify-center font-serif-italic shadow-accent`}
-      >
-        {initial(name)}
-      </div>
+      {avatarUrl ? (
+        // Public image URL (no bytes stored server-side). On load error, the gradient-initial
+        // fallback shows through because the <img> collapses — so we layer it under the image.
+        <div
+          className={`${sizes[size]} relative rounded-full bg-linear-to-br from-accent to-[#9AA6F5] text-white flex items-center justify-center font-serif-italic shadow-accent overflow-hidden`}
+        >
+          <span className="absolute inset-0 flex items-center justify-center">
+            {initial(name)}
+          </span>
+          <img
+            src={avatarUrl}
+            alt={name || 'persona'}
+            referrerPolicy="no-referrer"
+            className="relative w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
+      ) : (
+        <div
+          className={`${sizes[size]} rounded-full bg-linear-to-br from-accent to-[#9AA6F5] text-white flex items-center justify-center font-serif-italic shadow-accent`}
+        >
+          {initial(name)}
+        </div>
+      )}
       {online && (
         <span className="absolute right-0 bottom-0 w-[11px] h-[11px] rounded-full bg-green border-2 border-bg" />
       )}

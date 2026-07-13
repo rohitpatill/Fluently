@@ -35,12 +35,17 @@ class Conversation:
         category: str | None = None,
         target_word_ids: list[str] | None = None,
         user_id: str = DEFAULT_USER_ID,
+        persona_id: str | None = None,
         id: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ):
         self.id = id
         self.user_id = user_id
+        # Which persona (companion) this chat belongs to. Threads are persona-scoped: a
+        # conversation is only shown/searched when its persona is the active one. Legacy
+        # pre-multipersona conversations carry None until migration backfills them.
+        self.persona_id = persona_id
         self.title = title
         self.category = category
         self.target_word_ids = list(target_word_ids or [])
@@ -52,6 +57,7 @@ class Conversation:
     def to_doc(self) -> dict:
         return {
             "user_id": self.user_id,
+            "persona_id": self.persona_id,
             "title": self.title,
             "category": self.category,
             "target_word_ids": list(self.target_word_ids),
@@ -64,6 +70,7 @@ class Conversation:
         return cls(
             id=_oid_to_str(doc.get("_id")),
             user_id=doc.get("user_id", DEFAULT_USER_ID),
+            persona_id=_oid_to_str(doc.get("persona_id")),
             title=doc.get("title", "New conversation"),
             category=doc.get("category"),
             target_word_ids=[str(x) for x in doc.get("target_word_ids", [])],
@@ -203,6 +210,7 @@ class User:
         adopted_default: bool = False,
         encrypted_api_key: str = "",
         model_tier: str = "",
+        active_persona_id: str | None = None,
         id: str | None = None,
         created_at: datetime | None = None,
     ):
@@ -217,6 +225,9 @@ class User:
         # chosen tier ("swift"|"sage"). Empty until the user finishes "How smart should I be?".
         self.encrypted_api_key = encrypted_api_key
         self.model_tier = model_tier
+        # The currently-active persona (companion) id. Drives which persona content feeds the
+        # prompt and which conversations are shown. None only for legacy data before migration.
+        self.active_persona_id = active_persona_id
         self.created_at = created_at or utcnow()
 
     def to_doc(self) -> dict:
@@ -228,6 +239,7 @@ class User:
             "adopted_default": self.adopted_default,
             "encrypted_api_key": self.encrypted_api_key,
             "model_tier": self.model_tier,
+            "active_persona_id": self.active_persona_id,
             "created_at": self.created_at,
         }
 
@@ -242,7 +254,53 @@ class User:
             adopted_default=doc.get("adopted_default", False),
             encrypted_api_key=doc.get("encrypted_api_key", ""),
             model_tier=doc.get("model_tier", ""),
+            active_persona_id=_oid_to_str(doc.get("active_persona_id")),
             created_at=doc.get("created_at"),
+        )
+
+
+class Persona:
+    """A companion identity the user can talk to. Each user may keep several and switch the
+    active one. Every persona owns its OWN markdown `content` (the same format that used to
+    live in the single `persona` memory file: a `# System Persona` header with Name/Relation/
+    Gender/Personality/Speaking style fields + a `## Relationship memories` section the agent
+    writes to). `avatar_url` is a PUBLIC image URL rendered by the frontend (no bytes stored —
+    keeps the free-tier Mongo small; an upload path can be added later without a schema change)."""
+
+    def __init__(
+        self,
+        user_id: str = DEFAULT_USER_ID,
+        content: str = "",
+        avatar_url: str = "",
+        id: str | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+    ):
+        self.id = id
+        self.user_id = user_id
+        self.content = content
+        self.avatar_url = avatar_url
+        self.created_at = created_at or utcnow()
+        self.updated_at = updated_at or utcnow()
+
+    def to_doc(self) -> dict:
+        return {
+            "user_id": self.user_id,
+            "content": self.content,
+            "avatar_url": self.avatar_url,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_doc(cls, doc: dict) -> "Persona":
+        return cls(
+            id=_oid_to_str(doc.get("_id")),
+            user_id=doc.get("user_id", DEFAULT_USER_ID),
+            content=doc.get("content", ""),
+            avatar_url=doc.get("avatar_url", ""),
+            created_at=doc.get("created_at"),
+            updated_at=doc.get("updated_at"),
         )
 
 

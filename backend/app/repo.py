@@ -12,12 +12,13 @@ from datetime import datetime
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from .models import Conversation, Message, User, Word, WordEvent, utcnow
+from .models import Conversation, Message, Persona, User, Word, WordEvent, utcnow
 from .mongo import (
     DEFAULT_USER_ID,
     conversations_col,
     memory_files_col,
     messages_col,
+    personas_col,
     users_col,
     word_events_col,
     words_col,
@@ -122,8 +123,11 @@ def events_for_conversation(conversation_id: str, user_id: str = DEFAULT_USER_ID
 
 
 # ============================================================ CONVERSATIONS
-def list_conversations(user_id: str = DEFAULT_USER_ID) -> list[Conversation]:
-    docs = conversations_col().find({"user_id": user_id}).sort("updated_at", -1)
+def list_conversations(user_id: str = DEFAULT_USER_ID, persona_id: str | None = None) -> list[Conversation]:
+    q: dict = {"user_id": user_id}
+    if persona_id is not None:
+        q["persona_id"] = persona_id
+    docs = conversations_col().find(q).sort("updated_at", -1)
     return [Conversation.from_doc(d) for d in docs]
 
 
@@ -168,8 +172,12 @@ def delete_conversation(conversation_id: str, user_id: str = DEFAULT_USER_ID) ->
     return True
 
 
-def recent_conversations(user_id: str = DEFAULT_USER_ID, limit: int = 8) -> list[Conversation]:
-    docs = conversations_col().find({"user_id": user_id}).sort("updated_at", -1).limit(limit)
+def recent_conversations(user_id: str = DEFAULT_USER_ID, limit: int = 8,
+                          persona_id: str | None = None) -> list[Conversation]:
+    q: dict = {"user_id": user_id}
+    if persona_id is not None:
+        q["persona_id"] = persona_id
+    docs = conversations_col().find(q).sort("updated_at", -1).limit(limit)
     return [Conversation.from_doc(d) for d in docs]
 
 
@@ -187,13 +195,25 @@ def insert_message(msg: Message) -> Message:
 
 
 def all_messages(user_id: str = DEFAULT_USER_ID, exclude_conversation_id: str | None = None,
-                 conversation_id: str | None = None) -> list[Message]:
-    """Load messages for search (BM25/regex ranking happens in Python, as before)."""
+                 conversation_id: str | None = None, persona_id: str | None = None) -> list[Message]:
+    """Load messages for search (BM25/regex ranking happens in Python, as before).
+
+    When `persona_id` is given, results are limited to conversations belonging to that persona,
+    so a companion can only recall/search chats it actually had with the user."""
     q: dict = {"user_id": user_id, "role": {"$in": ["user", "assistant"]}}
     if conversation_id is not None:
         q["conversation_id"] = conversation_id
     if exclude_conversation_id is not None:
         q["conversation_id"] = {"$ne": exclude_conversation_id}
+    if persona_id is not None:
+        # Narrow to the persona's conversations, honoring any include/exclude constraint by
+        # folding it into the id set (replaces the plain conversation_id filter set above).
+        conv_ids = [c.id for c in list_conversations(user_id, persona_id=persona_id)]
+        if conversation_id is not None:
+            conv_ids = [cid for cid in conv_ids if cid == conversation_id]
+        if exclude_conversation_id is not None:
+            conv_ids = [cid for cid in conv_ids if cid != exclude_conversation_id]
+        q["conversation_id"] = {"$in": conv_ids}
     docs = messages_col().find(q).sort([("conversation_id", 1), ("seq", 1)])
     return [Message.from_doc(d) for d in docs]
 
@@ -364,6 +384,86 @@ def clear_user_model(user_id: str) -> None:
     users_col().update_one(
         {"_id": _oid(user_id)}, {"$set": {"encrypted_api_key": "", "model_tier": ""}}
     )
+
+
+# ============================================================ PERSONAS
+def list_personas(user_id: str = DEFAULT_USER_ID) -> list[Persona]:
+    docs = personas_col().find({"user_id": user_id}).sort("created_at", 1)
+    return [Persona.from_doc(d) for d in docs]
+
+
+def get_persona(persona_id: str, user_id: str = DEFAULT_USER_ID) -> Persona | None:
+    try:
+        doc = personas_col().find_one({"_id": _oid(persona_id), "user_id": user_id})
+    except ValueError:
+        return None
+    return Persona.from_doc(doc) if doc else None
+
+
+def insert_persona(persona: Persona) -> Persona:
+    persona.created_at = persona.created_at or utcnow()
+    persona.updated_at = utcnow()
+    res = personas_col().insert_one(persona.to_doc())
+    persona.id = str(res.inserted_id)
+    return persona
+
+
+def save_persona(persona: Persona) -> Persona:
+    persona.updated_at = utcnow()
+    personas_col().update_one({"_id": _oid(persona.id)}, {"$set": persona.to_doc()})
+    return persona
+
+
+def set_persona_content(persona_id: str, content: str, user_id: str = DEFAULT_USER_ID) -> None:
+    personas_col().update_one(
+        {"_id": _oid(persona_id), "user_id": user_id},
+        {"$set": {"content": content, "updated_at": utcnow()}},
+    )
+
+
+def set_persona_avatar(persona_id: str, avatar_url: str, user_id: str = DEFAULT_USER_ID) -> None:
+    personas_col().update_one(
+        {"_id": _oid(persona_id), "user_id": user_id},
+        {"$set": {"avatar_url": avatar_url, "updated_at": utcnow()}},
+    )
+
+
+def delete_persona(persona_id: str, user_id: str = DEFAULT_USER_ID) -> tuple[int, int]:
+    """Delete a persona AND all its conversations/messages (they only made sense with that
+    companion). Word scores stay — score events are detached from the removed conversations.
+    Returns (conversations_deleted, messages_deleted)."""
+    convs = list_conversations(user_id, persona_id=persona_id)
+    conv_ids = [c.id for c in convs]
+    n_msg = 0
+    if conv_ids:
+        n_msg = messages_col().delete_many(
+            {"conversation_id": {"$in": conv_ids}, "user_id": user_id}
+        ).deleted_count
+        word_events_col().update_many(
+            {"conversation_id": {"$in": conv_ids}, "user_id": user_id},
+            {"$set": {"conversation_id": None, "message_id": None}},
+        )
+    n_conv = conversations_col().delete_many(
+        {"_id": {"$in": [_oid(cid) for cid in conv_ids]}, "user_id": user_id}
+    ).deleted_count if conv_ids else 0
+    personas_col().delete_one({"_id": _oid(persona_id), "user_id": user_id})
+    return n_conv, n_msg
+
+
+def count_personas(user_id: str = DEFAULT_USER_ID) -> int:
+    return personas_col().count_documents({"user_id": user_id})
+
+
+def purge_personas(user_id: str = DEFAULT_USER_ID) -> int:
+    """Delete ALL of a user's personas and clear the active pointer. Part of the full-reset /
+    reset-keep-words flows (the app then restarts at onboarding, recreating one persona)."""
+    n = personas_col().delete_many({"user_id": user_id}).deleted_count
+    users_col().update_one({"_id": _oid(user_id)}, {"$set": {"active_persona_id": None}})
+    return n
+
+
+def set_active_persona(user_id: str, persona_id: str | None) -> None:
+    users_col().update_one({"_id": _oid(user_id)}, {"$set": {"active_persona_id": persona_id}})
 
 
 def reassign_default_data(new_user_id: str) -> dict:

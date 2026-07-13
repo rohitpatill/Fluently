@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, Loader2, LogOut, MessagesSquare, NotebookPen, ShieldAlert, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, Loader2, LogOut, MessagesSquare, NotebookPen, ShieldAlert, Trash2, Users, Wrench } from 'lucide-react';
 
 import * as api from '../api';
 import { useDevMode } from '../hooks/useDevMode';
 import { useModelTiers } from '../hooks/useApi';
 import { TierCard, Spinner } from './Shared';
+import PersonasSettings from './Personas';
 
 /* Danger levels: soft (accent-outline confirm) vs hard (type-to-confirm). */
 
@@ -316,6 +317,13 @@ export default function SettingsView({ personaName, me }) {
         <div className="mt-8">
           <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3">Account</div>
           <ProfileCard me={me} onLogout={handleLogout} loggingOut={loggingOut} />
+        </div>
+
+        <div className="mt-8">
+          <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-3 flex items-center gap-2">
+            <Users size={13} /> Personas
+          </div>
+          <PersonasSettings />
         </div>
 
         <div className="mt-8">
