@@ -35,8 +35,9 @@ Underneath that ordinary-feeling conversation, a hidden engine runs on every tur
 - ⚖️ **It silently scores how well you produced each word** — a separate lightweight "judge" model reads your message after every turn and classifies your usage of *all* your tracked words, applying a proficiency score change. This never blocks or slows the chat.
 - 🧠 **It remembers your life.** Fluently maintains a living memory of who you are, what's happening in your life, and the relationship you share — and edits that memory itself, with real tools, as it learns new things about you.
 - ⏰ **It knows what time it is.** Every conversation is grounded in the real date, weekday, and part of day, so it can reference *yesterday*, *this week*, or *the deadline you mentioned* correctly.
+- 🎙️ **You can just talk to it.** Tap the mic and have a real, out-loud conversation — full-duplex voice, in the persona's own voice, with your word usage scored live as you speak.
 
-To the user, it feels like texting a friend who happens to be a brilliant, patient English tutor. That gap — between how simple it feels and how much is happening underneath — **is the product.**
+To the user, it feels like texting (or talking to) a friend who happens to be a brilliant, patient English tutor. That gap — between how simple it feels and how much is happening underneath — **is the product.**
 
 ---
 
@@ -64,6 +65,15 @@ A transparent scoring matrix (the single source of truth in one service) rewards
 
 Scores are 0–100, no daily cap (a word *can* go 0→100 in one day of real progress), with lazy decay applied on read. Every score change is traceable to the message that caused it, and shown in the UI as a chip you can expand to read the judge's reasoning.
 
+### 🎙️ Real-time voice — talk to your persona out loud
+Beyond text, you can **speak** to your companion in a live, full-duplex voice call powered by **Google Gemini Live**. The browser streams your mic to the backend, which proxies it to Gemini and streams the persona's spoken reply back — barge-in and all. It's not a bolt-on: voice reuses the *entire* text brain — the same persona, memory, full vocabulary list, and tools — so the companion you talk to is the same one you text.
+
+Two things make it special:
+- **The same USP, live.** Because a live model calls tools reliably, voice scores your words **inline** via a dedicated `score_word` tool the moment you say one — a score animation pops on screen mid-sentence, no waiting. It routes through the *same* scoring service as text, so your numbers never diverge across modes.
+- **Each persona has a voice.** Every companion is assigned one of ~30 Gemini Live voices (a hand-picked fit for the curated "Discover" figures, or your own choice in the persona editor). And if the persona is someone the model already knows — Newton, Austen, a fictional character — it's prompted to *embody their manner of speaking*, not just recite a description.
+
+Voice conversations are transcribed and **saved into the same chat thread** as text, so nothing is lost when you hang up — reopen the mic and it picks up with full history.
+
 ### 🔑 Bring-your-own-key, with a choice of brains
 Every user supplies **their own Google Gemini API key** and picks a tier that governs *every* LLM call they make:
 
@@ -89,22 +99,25 @@ graph TD
     end
 
     subgraph "Backend — FastAPI + LangChain 1.x"
-        API["Routers<br/>auth · model · chat · conversations<br/>words · memory · dashboard · settings"]
-        SVC["Services<br/>chat · judge · scoring · prompt_builder<br/>memory · model · crypto · auth · topics · search"]
+        API["Routers<br/>auth · model · chat · conversations<br/>words · memory · voice · dashboard · settings"]
+        SVC["Services<br/>chat · judge · scoring · prompt_builder<br/>memory · model · crypto · auth · topics · search<br/>voice_service · voice_tools"]
         REPO["repo.py<br/>THE single data layer"]
     end
 
     subgraph "External"
         MONGO[("MongoDB Atlas")]
         GEMINI["Google Gemini<br/>(user's own key)"]
+        LIVE["Gemini Live<br/>(real-time voice)"]
         GOOGLE["Google OAuth"]
     end
 
     FE -->|"session cookie<br/>(HttpOnly JWT)"| API
+    FE -.->|"WebSocket · duplex audio"| API
     API --> SVC
     SVC --> REPO
     REPO --> MONGO
     SVC -->|"per-user key + tier"| GEMINI
+    SVC -.->|"per-user key · voice"| LIVE
     API -->|"Authorization Code flow"| GOOGLE
 ```
 
@@ -142,6 +155,7 @@ sequenceDiagram
 | **Backend** | FastAPI, LangChain 1.x (manual `bind_tools` loop — not `create_agent`; we own persistence), Pydantic v2, Uvicorn. |
 | **Database** | MongoDB Atlas via PyMongo (sync), behind a single swappable data layer. |
 | **LLM** | Google Gemini (`google_genai` provider), bring-your-own-key, Swift/Sage tiers. |
+| **Voice** | Google Gemini Live (real-time duplex audio) via the `google-genai` SDK, proxied over a WebSocket; browser AudioWorklet for 16kHz PCM capture + 24kHz playback. |
 | **Auth** | Google OAuth 2.0 (server-side code flow) + stateless JWT session cookie (PyJWT HS256). |
 | **Crypto** | Fernet symmetric encryption for users' API keys at rest (`cryptography`). |
 | **Search** | BM25 + regex over past messages (`rank-bm25`), ranked in Python. |
@@ -156,18 +170,18 @@ ENG/
 │   └── src/
 │       ├── App.jsx          Gating: health → auth → onboarding → model-config → app
 │       ├── api.js           fetch wrapper (credentials:'include'), one fn per endpoint
-│       ├── hooks/           TanStack Query hooks
-│       └── components/      Chat · Words · Memory · Settings · Onboarding · Login · Shared
+│       ├── hooks/           TanStack Query hooks + useVoiceSession (mic/WS/playback)
+│       └── components/      Chat · VoiceOverlay · Words · Memory · Settings · Personas · Onboarding · Login · Shared
 │
 ├── backend/
 │   ├── app/
 │   │   ├── main.py          FastAPI app, CORS, routers, startup (Mongo ping + indexes)
-│   │   ├── config.py        Settings + MODEL_TIERS (Swift/Sage source of truth)
+│   │   ├── config.py        Settings + MODEL_TIERS (Swift/Sage) + VOICES catalogue
 │   │   ├── repo.py          THE single data layer — only module touching Mongo
 │   │   ├── deps.py          Auth deps: get_current_user, require_model_configured
 │   │   ├── prompts.py       ALL prompt templates
-│   │   ├── routers/         HTTP layer: auth · model · chat · conversations · words …
-│   │   └── services/        Business logic: chat · judge · scoring · memory · model …
+│   │   ├── routers/         HTTP layer: auth · model · chat · conversations · words · voice (WS) …
+│   │   └── services/        Business logic: chat · judge · scoring · memory · model · voice_service · voice_tools …
 │   ├── tests/               Permanent pytest suite (LLMs mocked by default)
 │   ├── run_tests.py         Area-selectable concise test runner
 │   └── requirements.txt
@@ -316,7 +330,7 @@ Open [http://localhost:5173](http://localhost:5173).
 2. **Set up your persona** — name your companion, pick its relationship to you, describe its personality.
 3. **Tell it about yourself** — a name and a free-text "about you" (this gets intelligently distilled into your memory files).
 4. **Choose a brain** — paste your Gemini API key, verify it, and pick **Swift** or **Sage**.
-5. You'll land on the **Words** tab — add a few words you want to master, then start a **Chat** and watch them appear naturally in conversation.
+5. You'll land on the **Words** tab — add a few words you want to master, then start a **Chat** and watch them appear naturally in conversation. Prefer talking? Tap the 🎙️ **mic** in the composer to have the whole conversation out loud instead. (Want to pick your persona's voice? Open **Settings → Personas → Manage**, edit a persona, and choose from the voice list.)
 
 ---
 
@@ -357,6 +371,8 @@ All endpoints except the auth handshake require the session cookie (`401` withou
 | **Conversations** | `POST /api/conversations`, `GET` list/detail/messages, `PATCH .../category`, `POST .../opener`, `DELETE`, `POST /api/conversations/search` |
 | **Words** | `GET/POST/GET/DELETE /api/words…`, `POST .../adjust`, `GET .../events`, `PUT .../note` |
 | **Memory** | `GET/POST/PUT` identity · memory · persona files, `PUT .../persona/form`, `POST /api/memory/onboarding` |
+| **Personas** | `GET/POST/PUT/DELETE /api/personas…`, `POST .../activate`, `GET /catalog`, `POST /catalog/{id}/use` |
+| **Voice** | `WS /api/voice/ws/{conversation_id}` (real-time audio), `GET /api/voice/voices`, `GET /api/voice/status` |
 | **Dashboard** | `GET /api/dashboard/stats` |
 | **Settings** | Data-management hard-delete endpoints |
 
