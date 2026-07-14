@@ -186,6 +186,7 @@ class PersonaForm(BaseModel):
     name: str
     relation: str  # best friend, mentor, teacher, ...
     gender: str = ""
+    voice: str = ""  # Gemini Live voice id (voice mode); blank -> default from gender
     personality: str = ""  # free-text custom box
     speaking_style: str = ""
     avatar_url: str = ""  # optional PUBLIC image URL for the companion's avatar
@@ -197,6 +198,7 @@ class PersonaOut(BaseModel):
     name: str
     relation: str = ""
     gender: str = ""
+    voice: str = ""  # Gemini Live voice id used in voice mode
     personality: str = ""
     speaking_style: str = ""
     avatar_url: str = ""
@@ -210,6 +212,7 @@ class PersonaCreate(BaseModel):
     name: str
     relation: str
     gender: str = ""
+    voice: str = ""  # Gemini Live voice id (voice mode); blank -> default from gender
     personality: str = ""
     speaking_style: str = ""
     avatar_url: str = ""
@@ -225,6 +228,7 @@ class CatalogPersona(BaseModel):
     name: str
     relation: str = ""
     gender: str = ""
+    voice: str = ""  # hand-picked Gemini Live voice for this figure
     speaking_style: str = ""
     avatar_url: str = ""
     description: str = ""
@@ -234,6 +238,20 @@ class CatalogCategory(BaseModel):
     key: str
     label: str
     personas: list[CatalogPersona]
+
+
+# ---------- Voice (voice-mode voices + availability) ----------
+class VoiceOut(BaseModel):
+    id: str  # the exact Gemini Live voice_name
+    label: str
+    tone: str  # short "tone, pitch" descriptor (e.g. "Warm, Middle pitch")
+    gender: str  # "male" | "female" (community-inferred; used for defaulting)
+
+
+class VoiceCatalogOut(BaseModel):
+    voices: list[VoiceOut]
+    default: str  # DEFAULT_VOICE id
+    audition_url: str  # where the user can hear the voices (Google AI Studio)
 
 
 # ---------- Search ----------

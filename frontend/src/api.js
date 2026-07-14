@@ -137,6 +137,17 @@ export const getPersonaCatalog = () => request('/api/personas/catalog');
 export const usePersonaFromCatalog = (catalogId) =>
   request(`/api/personas/catalog/${catalogId}/use`, { method: 'POST' });
 
+// ---------- Voice mode (real-time audio via Gemini Live) ----------
+export const getVoices = () => request('/api/voice/voices');
+
+export const getVoiceStatus = () => request('/api/voice/status');
+
+// The WebSocket URL for a conversation's voice session (derives ws:// from the http base).
+export const voiceSocketUrl = (conversationId) => {
+  const wsBase = BASE_URL.replace(/^http/, 'ws');
+  return `${wsBase}/api/voice/ws/${conversationId}`;
+};
+
 // ---------- Model (bring-your-own-key + Swift/Sage tiers) ----------
 export const getModelTiers = () => request('/api/model/tiers');
 

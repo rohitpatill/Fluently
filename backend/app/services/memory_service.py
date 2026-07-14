@@ -173,12 +173,16 @@ def write_raw(file: str, raw: str, user_id: str = DEFAULT_USER_ID) -> None:
     _set_content(key, normalized, user_id)
 
 
-_PERSONA_FIELDS = ("Name:", "Relation to user:", "Gender:", "Personality:", "Speaking style:")
+_PERSONA_FIELDS = ("Name:", "Relation to user:", "Gender:", "Voice:", "Personality:", "Speaking style:")
 
 
 def build_persona_content(form: dict, existing_raw: str = "") -> str:
     """Compose a persona's markdown from the onboarding/edit form, PRESERVING any existing
-    relationship-memory entries found in `existing_raw` (empty for a brand-new persona)."""
+    relationship-memory entries found in `existing_raw` (empty for a brand-new persona).
+
+    `Voice` is the Gemini Live voice id used in voice mode (see config.VOICES). It defaults
+    from the persona's Gender when the form leaves it blank, so a persona always has a
+    speakable voice even though the onboarding flow never asks for one."""
     marker = "## Relationship memories"
     if marker in existing_raw:
         existing = existing_raw.split(marker, 1)[1]
@@ -191,11 +195,15 @@ def build_persona_content(form: dict, existing_raw: str = "") -> str:
         )
     existing_memories = existing.strip()
 
+    from ..config import resolve_voice  # local import avoids a config<->service cycle
+    voice = resolve_voice(form.get("voice", ""), form.get("gender", ""))
+
     header = (
         "# System Persona\n\n"
         f"Name: {form.get('name', '')}\n"
         f"Relation to user: {form.get('relation', '')}\n"
         f"Gender: {form.get('gender', '')}\n"
+        f"Voice: {voice}\n"
         f"Personality: {form.get('personality', '')}\n"
         f"Speaking style: {form.get('speaking_style', '')}\n\n"
         f"{marker}\n\n"
@@ -207,6 +215,7 @@ _FIELD_KEYS = {
     "name:": "name",
     "relation to user:": "relation",
     "gender:": "gender",
+    "voice:": "voice",
     "personality:": "personality",
     "speaking style:": "speaking_style",
 }

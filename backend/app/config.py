@@ -82,6 +82,12 @@ class Settings(BaseSettings):
         Browsers only accept SameSite=None when the cookie is also Secure (https)."""
         return "none" if (self.cross_site and self.cookie_secure) else "lax"
 
+    # --- Voice mode (Gemini Live real-time audio) ---
+    # The live audio-to-audio model used for voice conversations. Kept configurable so we can
+    # swap it (e.g. to a native-audio model that supports non-blocking tools) without a code
+    # change. Voice mode uses the SAME per-user BYO key as text mode (resolved per request).
+    voice_model: str = "gemini-3.1-flash-live-preview"
+
     # User's timezone — all temporal reasoning in the prompt is computed in this zone.
     user_timezone: str = "Asia/Kolkata"
 
@@ -136,3 +142,78 @@ DEFAULT_MODEL_TIER = "swift"
 def tier_config(tier: str) -> dict | None:
     """Look up a tier's config by key; None if unknown."""
     return MODEL_TIERS.get((tier or "").strip().lower())
+
+
+# --- Voice catalogue (Gemini Live prebuilt voices) ------------------------------------
+# SINGLE SOURCE OF TRUTH for the voices a persona can speak with. Each entry:
+#   id     -> the exact `voice_name` Gemini Live expects (case-sensitive)
+#   label  -> what we show in the picker (same as the voice id, kept separate so we could
+#             rename the display without breaking the API value)
+#   tone   -> Google's own short "tone, pitch" descriptor (as shown in AI Studio's picker)
+#   gender -> "male" | "female" — community-inferred (Google publishes tone, NOT gender);
+#             used ONLY to pick a sensible DEFAULT voice from a persona's Gender field.
+# Users can audition every voice live in Google AI Studio (link surfaced in the UI):
+#   https://aistudio.google.com/live?model=gemini-3.1-flash-live-preview
+# Adding/removing a voice = edit this list only (backend list endpoint + UI both read it).
+VOICES: list[dict] = [
+    {"id": "Puck", "label": "Puck", "tone": "Upbeat, Middle pitch", "gender": "male"},
+    {"id": "Charon", "label": "Charon", "tone": "Informative, Lower pitch", "gender": "male"},
+    {"id": "Fenrir", "label": "Fenrir", "tone": "Excitable, Younger", "gender": "male"},
+    {"id": "Orus", "label": "Orus", "tone": "Firm, Middle pitch", "gender": "male"},
+    {"id": "Iapetus", "label": "Iapetus", "tone": "Clear, Middle pitch", "gender": "male"},
+    {"id": "Umbriel", "label": "Umbriel", "tone": "Easy-going, Middle pitch", "gender": "male"},
+    {"id": "Algieba", "label": "Algieba", "tone": "Smooth, Lower pitch", "gender": "male"},
+    {"id": "Algenib", "label": "Algenib", "tone": "Gravelly, Lower pitch", "gender": "male"},
+    {"id": "Rasalgethi", "label": "Rasalgethi", "tone": "Informative, Middle pitch", "gender": "male"},
+    {"id": "Alnilam", "label": "Alnilam", "tone": "Firm, Lower middle pitch", "gender": "male"},
+    {"id": "Schedar", "label": "Schedar", "tone": "Even, Lower middle pitch", "gender": "male"},
+    {"id": "Achird", "label": "Achird", "tone": "Friendly, Middle pitch", "gender": "male"},
+    {"id": "Zubenelgenubi", "label": "Zubenelgenubi", "tone": "Casual, Middle pitch", "gender": "male"},
+    {"id": "Sadaltager", "label": "Sadaltager", "tone": "Knowledgeable, Middle pitch", "gender": "male"},
+    {"id": "Enceladus", "label": "Enceladus", "tone": "Breathy, Lower pitch", "gender": "male"},
+    {"id": "Sadachbia", "label": "Sadachbia", "tone": "Lively, Lower pitch", "gender": "male"},
+    {"id": "Zephyr", "label": "Zephyr", "tone": "Bright, Higher pitch", "gender": "female"},
+    {"id": "Kore", "label": "Kore", "tone": "Firm, Middle pitch", "gender": "female"},
+    {"id": "Leda", "label": "Leda", "tone": "Youthful, Higher pitch", "gender": "female"},
+    {"id": "Aoede", "label": "Aoede", "tone": "Breezy, Middle pitch", "gender": "female"},
+    {"id": "Callirrhoe", "label": "Callirrhoe", "tone": "Easy-going, Middle pitch", "gender": "female"},
+    {"id": "Autonoe", "label": "Autonoe", "tone": "Bright, Middle pitch", "gender": "female"},
+    {"id": "Despina", "label": "Despina", "tone": "Smooth, Middle pitch", "gender": "female"},
+    {"id": "Erinome", "label": "Erinome", "tone": "Clear, Middle pitch", "gender": "female"},
+    {"id": "Laomedeia", "label": "Laomedeia", "tone": "Upbeat, Higher pitch", "gender": "female"},
+    {"id": "Achernar", "label": "Achernar", "tone": "Soft, Higher pitch", "gender": "female"},
+    {"id": "Gacrux", "label": "Gacrux", "tone": "Mature, Middle pitch", "gender": "female"},
+    {"id": "Pulcherrima", "label": "Pulcherrima", "tone": "Forward, Middle pitch", "gender": "female"},
+    {"id": "Vindemiatrix", "label": "Vindemiatrix", "tone": "Gentle, Middle pitch", "gender": "female"},
+    {"id": "Sulafat", "label": "Sulafat", "tone": "Warm, Middle pitch", "gender": "female"},
+]
+
+# Fast lookup: voice id -> entry.
+VOICES_BY_ID: dict[str, dict] = {v["id"]: v for v in VOICES}
+
+# The default voice when a persona has no voice set, keyed by its Gender field.
+# Falls back to DEFAULT_VOICE for unknown/blank gender.
+DEFAULT_VOICE = "Puck"  # friendly, neutral-masculine — a safe default companion voice
+_DEFAULT_VOICE_BY_GENDER = {
+    "male": "Puck",
+    "female": "Aoede",
+}
+
+
+def is_valid_voice(voice: str) -> bool:
+    """True if `voice` is a known Gemini Live voice id."""
+    return (voice or "").strip() in VOICES_BY_ID
+
+
+def default_voice_for_gender(gender: str) -> str:
+    """Pick a sensible default voice from a persona's Gender field (no LLM). Used when a
+    persona is created (onboarding / Discover) without an explicit voice choice."""
+    return _DEFAULT_VOICE_BY_GENDER.get((gender or "").strip().lower(), DEFAULT_VOICE)
+
+
+def resolve_voice(voice: str, gender: str = "") -> str:
+    """Return a valid voice id: the persona's chosen voice if valid, else a gender default."""
+    v = (voice or "").strip()
+    if v in VOICES_BY_ID:
+        return v
+    return default_voice_for_gender(gender)

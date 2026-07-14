@@ -103,6 +103,18 @@ def insert_event(event: WordEvent) -> WordEvent:
     return event
 
 
+def set_event_message_id(event_id: str, message_id: str, user_id: str = DEFAULT_USER_ID) -> None:
+    """Attach a WordEvent to a message after the fact. Voice mode scores a word (via the live
+    `score_word` tool) DURING the turn, before the user's transcript message is persisted; once
+    that message exists we back-fill its id so the chip shows on the right message on reload."""
+    try:
+        word_events_col().update_one(
+            {"_id": _oid(event_id), "user_id": user_id}, {"$set": {"message_id": message_id}}
+        )
+    except ValueError:
+        pass
+
+
 def word_events(word_id: str, user_id: str = DEFAULT_USER_ID, limit: int = 100) -> list[WordEvent]:
     docs = (
         word_events_col()

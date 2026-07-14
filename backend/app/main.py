@@ -18,6 +18,7 @@ from .routers import (
     model,
     personas,
     settings as settings_router,
+    voice,
     words,
 )
 
@@ -51,6 +52,7 @@ app.include_router(words.router)
 app.include_router(memory.router)
 app.include_router(model.router)
 app.include_router(personas.router)
+app.include_router(voice.router)
 app.include_router(dashboard.router)
 app.include_router(settings_router.router)
 

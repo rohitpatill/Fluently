@@ -72,6 +72,8 @@ def use_catalog_persona(catalog_id: str, user_id: str = Depends(get_current_user
         "name": entry.get("name", ""),
         "relation": entry.get("relation", ""),
         "gender": entry.get("gender", ""),
+        # the catalog's hand-picked voice (falls back to a gender default in build_persona_content)
+        "voice": entry.get("voice", ""),
         # the catalog description guides how the companion talks — seed it as personality
         "personality": entry.get("description", ""),
         "speaking_style": entry.get("speaking_style", ""),

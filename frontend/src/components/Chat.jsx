@@ -3,13 +3,14 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
-import { ChevronDown, Menu, Plus, Search, Send, Sparkles, Trash2, Wrench, X } from 'lucide-react';
+import { ChevronDown, Menu, Mic, Plus, Search, Send, Sparkles, Trash2, Wrench, X } from 'lucide-react';
 
 import * as api from '../api';
-import { useConversations, useMessages } from '../hooks/useApi';
+import { useConversations, useMessages, useVoiceStatus } from '../hooks/useApi';
 import { useDevMode } from '../hooks/useDevMode';
 import useKeyboardInset from '../hooks/useKeyboardInset';
 import { PersonaAvatar, Spinner, ThreadItemSkeleton, MessageBubbleSkeleton } from './Shared';
+import VoiceOverlay from './VoiceOverlay';
 import { formatThreadTime, nowClockLabel } from '../utils';
 
 const CHIP_STYLES = {
@@ -29,6 +30,10 @@ function ScoringChip({ event, index, animate }) {
   const kind = chipKind(event.event_type);
   const note = event.judge_notes || '';
   const expandable = !!note;
+  // The word this score is for — so 3 chips in a row are distinguishable and the user knows
+  // exactly which word earned what. Reloaded/text events carry `word_text`; live voice `score`
+  // events carry `word`.
+  const word = event.word_text || event.word || '';
 
   return (
     <motion.button
@@ -38,14 +43,15 @@ function ScoringChip({ event, index, animate }) {
       transition={{ delay: animate ? 0.12 + index * 0.08 : 0, duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
       onClick={() => expandable && setOpen((v) => !v)}
       title={expandable && !open ? note : ''}
-      className={`inline-flex items-start gap-1.5 border rounded-2xl px-3 py-1 text-xs font-medium text-left ${CHIP_STYLES[kind]} ${
+      className={`inline-flex items-start gap-1.5 border rounded-2xl px-3 py-1 text-xs font-medium text-left max-w-full ${CHIP_STYLES[kind]} ${
         expandable ? 'cursor-pointer' : 'cursor-default'
       }`}
     >
       <Sparkles size={11} className="mt-[3px] shrink-0" />
+      {word && <span className="shrink-0 font-semibold">{word}</span>}
       <span className="font-mono shrink-0 font-semibold">{event.delta > 0 ? `+${event.delta}` : event.delta}</span>
       {note && (
-        <span className={`font-normal opacity-90 ${open ? '' : 'max-w-[260px] truncate'}`}>· {note}</span>
+        <span className={`font-normal opacity-90 min-w-0 ${open ? 'break-words' : 'truncate'}`}>· {note}</span>
       )}
       {expandable && (
         <ChevronDown size={12} className={`mt-[3px] shrink-0 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -175,6 +181,8 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [threadsOpen, setThreadsOpen] = useState(false);
   const [clock, setClock] = useState(nowClockLabel());
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const voiceStatus = useVoiceStatus();
 
   const messages = useMessages(activeId);
   const scrollRef = useRef(null);
@@ -612,6 +620,16 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
                 placeholder={`Message ${personaName}…`}
                 className="border-none outline-none text-[14.5px] w-full bg-transparent text-text resize-none leading-relaxed max-h-32 field-sizing-content"
               />
+              {voiceStatus.data?.available && (
+                <button
+                  onClick={() => setVoiceOpen(true)}
+                  title={`Talk with ${personaName}`}
+                  aria-label={`Talk with ${personaName}`}
+                  className="w-9 h-9 shrink-0 border border-border-2 rounded-xl bg-surface hover:bg-bg text-accent flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <Mic size={16} />
+                </button>
+              )}
               <button
                 onClick={() => send()}
                 disabled={typing || !draft.trim()}
@@ -623,6 +641,22 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
           </div>
         )}
       </div>
+
+      <VoiceOverlay
+        open={voiceOpen}
+        conversationId={activeId}
+        personaName={personaName}
+        personaAvatar={personaAvatar}
+        onClose={() => {
+          setVoiceOpen(false);
+          // The voice turn(s) were saved server-side + scores/memory may have changed.
+          queryClient.invalidateQueries({ queryKey: ['messages', activeId] });
+          queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          queryClient.invalidateQueries({ queryKey: ['words'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+          queryClient.invalidateQueries({ queryKey: ['memory'] });
+        }}
+      />
     </div>
   );
 }

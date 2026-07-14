@@ -7,6 +7,7 @@ langchain>=1.0
 langchain-openai
 langchain-anthropic
 langchain-google-genai
+google-genai>=1.0   # raw Gemini SDK for the Live API (real-time voice)
 rank-bm25>=0.2.2
 sse-starlette>=2.1
 pymongo>=4.8

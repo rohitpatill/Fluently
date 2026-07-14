@@ -104,3 +104,23 @@ export function useModelTiers({ enabled = true } = {}) {
     staleTime: Infinity,
   });
 }
+
+// Whether voice mode is available for this user (they've configured a BYO key + tier).
+export function useVoiceStatus({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['voice-status'],
+    queryFn: api.getVoiceStatus,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+// The voice catalogue (names + tone descriptors + gender) for the persona-form picker.
+export function useVoices({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['voices'],
+    queryFn: api.getVoices,
+    enabled,
+    staleTime: Infinity,
+  });
+}

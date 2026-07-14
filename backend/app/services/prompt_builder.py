@@ -72,13 +72,36 @@ def _time_block() -> str:
 
 
 def _target_words_block(conversation: Conversation) -> str:
-    if not conversation.target_word_ids:
-        return "(no target words yet — the user hasn't added vocabulary, just have a great conversation)"
-    words = repo.get_words_by_ids(conversation.target_word_ids, conversation.user_id)
+    """The user's FULL practice vocabulary (all words not yet mastered), lowest-score first.
+
+    Design: the persona/judge see EVERY word the user is practicing — not just a fixed 3 — so
+    the user can practice whatever comes up and it's always recognised + scored. Mastered words
+    (score 100) are dropped so the persona doesn't keep drilling what's already learned. The few
+    words the conversation was seeded with (`target_word_ids`) are marked ★ as a gentle "lean
+    here first" hint, but the persona may naturally use ANY word in the list. The naturalness
+    rules in the template keep this from ever feeling forced. Word count stays tiny in tokens."""
+    words = [w for w in repo.list_words(conversation.user_id) if w.score < 100]
+    if not words:
+        return "(no words to practice yet — the user hasn't added vocabulary, just have a great conversation)"
+
+    # lowest score first, then least-recently-used (mirrors the spaced-repetition picker)
+    from datetime import datetime, timezone
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+    def _key(w):
+        last = w.last_used_at or epoch
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return (w.score, last)
+
+    words.sort(key=_key)
+    seeded = set(conversation.target_word_ids or [])
+
     lines = []
     for w in words:
+        star = "★ " if w.id in seeded else ""
         lines.append(
-            f'- [id={w.id}] "{w.text}" ({w.kind}, proficiency {w.score:.0f}/100): {w.meaning or "no description yet"}'
+            f'- {star}[id={w.id}] "{w.text}" ({w.kind}, proficiency {w.score:.0f}/100): {w.meaning or "no description yet"}'
             + (f" | register: {w.register_notes}" if w.register_notes else "")
             + (f" | user's own memory hook: \"{w.note}\"" if w.note else "")
         )

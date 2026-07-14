@@ -67,7 +67,8 @@ naturally into conversations, judges how well the user produces them, and tracks
 1. **Persona (multi-persona)** — the user assigns the system an identity at onboarding (name,
    relation e.g. best friend/mentor, personality, speaking style, optional public-URL avatar).
    A user may keep **several personas** and switch the active one (`User.active_persona_id`);
-   each persona is a doc in the `personas` collection holding its own markdown (identity fields
+   each persona is a doc in the `personas` collection holding its own markdown (identity fields —
+   incl. a `Voice:` line for voice mode, one of ~30 Gemini Live voices, defaulted from Gender —
    + its own `## Relationship memories`). `identity`+`memory` (the human) are SHARED across all
    personas — only the companion changes. **Chats are persona-scoped** (a conversation carries a
    `persona_id`; listing + agent conversation-search + opener/topic context filter to the active
@@ -100,20 +101,27 @@ naturally into conversations, judges how well the user produces them, and tracks
    No daily cap — gains apply in full (0→100 possible in one day). Score clamped 0–100.
 4. **Judge** — after every user message, a cheap judge LLM (structured output) classifies
    usage of ALL tracked words in that message and applies scoring events. Never blocks chat.
+   (Text mode only — voice mode scores inline via the `score_word` tool instead; see concept 11.)
 5. **Dynamic system prompt** — assembled per LLM call in `prompt_builder.py`, order (deliberate
-   for model attention): persona → user identity → user's life/memories → vocabulary practice
-   (the #1 hidden mission — 5-step per-turn strategy: pick lowest-scored fitting targets, set up
-   more than use, react to correct/wrong usage, model cleaner English, never reveal the system)
+   for model attention): persona (incl. a mimicry rule: if the figure is real/known/fictional,
+   embody them from the model's own knowledge, not just the stored description) → user identity →
+   user's life/memories → vocabulary practice (the #1 hidden mission — the FULL word list with ★
+   on the seeded few; per-turn: favor ★ + lowest-scored but may use any, set up more than use,
+   react to correct/wrong usage, only 1-3/turn, model cleaner English, never reveal the system)
    → TIME block (date/weekday/exact time+AM/PM/part-of-day + yesterday/tomorrow/this-week
    enumerated/last-next week/this-next month, computed in `user_timezone` — explicitly told NOT
    to infer season/weather from the month) → category/topic → memory curation (the #2 job, every
    turn: notice new/changed/unchanged facts, append vs. edit, subject-free style, absolute dates
    only for time-bound facts) → other tools → behavior rules (crisp, human-like, silent
    bookkeeping, spine not sycophancy, mirror the user).
-6. **Target words** — picked per conversation by spaced repetition (lowest score, then
-   least recently used), stored on the conversation row. Each `Word` also has an optional user
-   `note` (their own memory hook — where they saw it, a mnemonic); it's user-authored only (judge/
-   agent never write it) and is fed into the target-words prompt block so the persona can lean on
+6. **Target words** — the persona/judge see the user's FULL practice vocabulary (all words with
+   score < 100), not a fixed handful, so the user can practice anything that comes up and it's
+   always recognised + scored. A per-conversation spaced-repetition pick (lowest score, then least
+   recently used) is still stored on the conversation row (`target_word_ids`) and marked ★ in the
+   prompt as a gentle "focus these first" hint — but the persona may naturally weave in ANY listed
+   word (only 1-3 per turn, never forced; near-mastered words barely touched). Each `Word` also has
+   an optional user `note` (their own memory hook — where they saw it, a mnemonic); user-authored
+   only (judge/agent never write it), fed into the words prompt block so the persona can lean on
    that association when setting the word up.
 7. **Agent tools** (in-process LangChain tools, NOT a separate MCP server — extractable later):
    `memory_update(file, action, ...)` — ONE tool, `action='append'` (text) or `'edit'`
@@ -159,6 +167,22 @@ naturally into conversations, judges how well the user produces them, and tracks
     A user with no key is GATED: LLM routes return 403 (`deps.require_model_configured`) and the
     frontend forces the brain step. The app's own `.env` provider keys are no longer used for real
     users. (Encrypted API-key storage was the old "Phase 3" — now built.)
+11. **Voice mode (real-time audio, BUILT)** — the user can TALK to the active persona (mic button
+    left of Send in the chat composer → a full-screen blurred overlay with the pulsing persona
+    avatar + live transcript + word-score pops). A backend **WebSocket** (`routers/voice.py`) proxies
+    duplex audio browser↔**Gemini Live** (`config.voice_model` = `gemini-3.1-flash-live-preview`;
+    mic 16kHz PCM in, 24kHz PCM out), paid by the user's OWN BYO key. It reuses text mode wholesale:
+    the SAME dynamic system prompt (persona/identity/memory/full word list/time) + the SAME tools
+    (`memory_update`/`search_conversations`, adapted for the Live protocol by `services/voice_tools.py`)
+    + `prompts.VOICE_MODE_INSTRUCTION` appended. **Scoring in voice is INLINE via a `score_word`
+    tool** (the live model calls it per spoken target word → instant on-screen animation) instead of
+    the post-turn judge — but it routes through the SAME `scoring_service`, so voice + text scores are
+    identical (one matrix, no double-count). Each completed voice turn is persisted as normal user+
+    assistant `Message`s, so the voice conversation shows in the chat thread afterward (tool calls in
+    Developer mode, score chips on the user msg — like text). Each **persona** has a `Voice:` (one of
+    ~30 Gemini Live voices in `config.VOICES`), defaulted from its Gender; picked in the manual persona
+    form (NOT onboarding), with a link to audition voices in Google AI Studio. Discover figures ship a
+    hand-picked voice. `services/voice_service.py` owns the live-session config (swap model = one line).
 
 ## Repository layout
 
@@ -175,19 +199,21 @@ ENG/
 │   └── src/
 │       ├── main.jsx         React root: QueryClientProvider + sonner Toaster + font imports
 │       ├── index.css        Tailwind v4 @theme design tokens (colors/fonts/radii/shadows/keyframes)
-│       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle; model: getModelTiers/getModelStatus/setModelKey/setModelTier
+│       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle; model: getModelTiers/getModelStatus/setModelKey/setModelTier; voice: getVoices/getVoiceStatus/voiceSocketUrl (ws:// from base)
 │       ├── utils.js         time formatting, persona/identity name parsing from raw markdown
-│       ├── hooks/useApi.js  TanStack Query hooks (health poll, me/auth [+has_key/tier], conversations, messages, words, stats, memory, model tiers)
+│       ├── hooks/useApi.js  TanStack Query hooks (health poll, me/auth [+has_key/tier], conversations, messages, words, stats, memory, model tiers, voice status/voices)
+│       ├── hooks/useVoiceSession.js  voice client: mic AudioWorklet (16k Int16 PCM) + WS + 24k playback (barge-in) + transcript/score/status state; start/stop
 │       ├── hooks/useDevMode.js localStorage-backed Developer-mode toggle (client-only, off by default)
 │       └── components/
 │           ├── Login.jsx       auth gate — single "Continue with Google" screen (Fluently-styled)
 │           ├── Onboarding.jsx  3-step flow: persona → about you → BrainStep (key + Swift/Sage tier); exports BrainStep (reused by App's model gate)
 │           ├── Rail.jsx        responsive nav — desktop left rail; mobile bottom bar; 3 main tabs + Settings
-│           ├── Chat.jsx        desktop threads sidebar / mobile slide-out drawer, topic cards, opener, messages, scoring chips, dev tools, composer; persona-scoped conversation cache + stale-activeId guard
+│           ├── Chat.jsx        desktop threads sidebar / mobile slide-out drawer, topic cards, opener, messages, scoring chips (now show the word name; mobile-safe width), dev tools, composer (mic button opens voice mode when available); persona-scoped conversation cache + stale-activeId guard
+│           ├── VoiceOverlay.jsx  full-screen voice mode: blurred backdrop, pulsing/rippling persona avatar reacting to audio, live transcript, word-score pops, stop button (uses useVoiceSession)
 │           ├── Words.jsx       stats cards, add+enrich, score bars, responsive rows, expandable detail with mobile-visible note edit
 │           ├── Memory.jsx      3 RAW markdown editors (identity/memory/persona) with Save → PUT .../raw
 │           ├── SettingsView.jsx Account + Log out, Personas (summary card), Brain (Swift/Sage switch + replace-key), Developer-mode toggle, data-management hard-delete cards
-│           ├── Personas.jsx    multi-persona: summary card → full-screen Manage overlay (Your personas: switch/edit/delete/add; Discover: curated catalog cards → copy). Responsive sheet
+│           ├── Personas.jsx    multi-persona: summary card → full-screen Manage overlay (Your personas: switch/edit/delete/add; Discover: curated catalog cards → copy). Persona form has gender + a Voice picker modal (voices by gender/tone + Google AI Studio audition link). Responsive sheet
 │           └── Shared.jsx      PersonaAvatar (+ optional avatarUrl image), Spinner, loaders, error screen, ScoreBar, TierCard (Swift/Sage brain card)
 └── backend/
     ├── requirements.txt  (+ google-auth, PyJWT, itsdangerous for OAuth/session; cryptography for key encryption)
@@ -207,9 +233,9 @@ ENG/
     ├── migrate_personas.py  ← one-time single→multi-persona migration (legacy persona doc → Persona row + backfill conversation persona_id; --commit)
     ├── data/            ← legacy pre-migration BACKUP only (old eng.db + .md files); app no longer uses it
     └── app/
-        ├── main.py              FastAPI app, CORS (credentials on), routers (incl. auth, model, personas), startup (mongo ping → ensure_indexes; memory bootstrap is per-user on login)
-        ├── config.py            pydantic-settings: encryption_key, legacy model choices, scoring constants, user_timezone, mongodb_uri/db, Google-OAuth + session settings; MODEL_TIERS (Swift/Sage source of truth) + tier_config
-        ├── assets/personas.json  curated public-persona "Discover" catalog (categories → figures; manually-filled avatar_url); read-only, copied into a user's personas on "use"
+        ├── main.py              FastAPI app, CORS (credentials on), routers (incl. auth, model, personas, voice), startup (mongo ping → ensure_indexes; memory bootstrap is per-user on login)
+        ├── config.py            pydantic-settings: encryption_key, legacy model choices, scoring constants, user_timezone, mongodb_uri/db, Google-OAuth + session settings; MODEL_TIERS (Swift/Sage source of truth) + tier_config; voice_model + VOICES catalogue (~30 Gemini Live voices) + resolve_voice
+        ├── assets/personas.json  curated public-persona "Discover" catalog (categories → figures; manually-filled avatar_url + a hand-picked voice per figure); read-only, copied into a user's personas on "use"
         ├── mongo.py             MongoDB connection (PyMongo), collection accessors (incl. users_col, personas_col), ensure_indexes (incl. uq_google_sub, personas index), DEFAULT_USER_ID
         ├── repo.py              THE single data layer — only module touching Mongo (swap DB = rewrite here); incl. user upsert + first-login adoption + model config + persona CRUD/activate/purge + persona-scoped conversation queries
         ├── models.py            PLAIN doc classes (to_doc/from_doc, str ids): Conversation (+persona_id), Message (tool_calls), Word (incl. user note), WordEvent (incl. message_id), User (…/encrypted_api_key/model_tier/active_persona_id), Persona (content + avatar_url)
@@ -225,6 +251,7 @@ ENG/
         │   ├── words.py         CRUD + LLM enrichment on add + manual adjust + event history + PUT /note (user hook)
         │   ├── memory.py        read/append/edit (old_string->new_string) memory files + PUT persona/form + POST onboarding (LLM-structured)
         │   ├── settings.py      data-management hard deletes (purge-all full-wipe also clears model key+tier)
+        │   ├── voice.py         VOICE MODE (Gemini Live): WS /api/voice/ws/{conv_id} duplex audio + server-side tools + per-turn persist; GET /voices + /status
         │   └── dashboard.py     GET /api/dashboard/stats
         └── services/
             ├── auth_service.py     Google OAuth flow + JWT session (build auth url, code exchange, ID-token verify, signed state/nonce, mint/decode session JWT)
@@ -237,9 +264,11 @@ ENG/
             ├── scoring_service.py  scoring matrix (no daily cap), lazy decay, spaced-repetition picker
             ├── topic_service.py    topic suggestions (persona-scoped recents) + word enrichment + onboarding structuring; all take user_id + resolve model
             ├── persona_catalog.py  loads/caches assets/personas.json (Discover catalog); categories()/get_entry()
-            ├── memory_service.py   free-text markdown engine; identity/memory in memory_files, persona routes to the ACTIVE persona doc (self-heals/migrates); active_persona_id/build_persona_content/parse_persona_fields
+            ├── memory_service.py   free-text markdown engine; identity/memory in memory_files, persona routes to the ACTIVE persona doc (self-heals/migrates); active_persona_id/build_persona_content (incl. Voice field)/parse_persona_fields
             ├── search_service.py   BM25/regex search (ranking in Python) over Mongo-loaded messages, context windows
-            └── agent_tools.py      LangChain @tool definitions (closure over user_id, not a db session)
+            ├── agent_tools.py      LangChain @tool definitions (closure over user_id, not a db session) — shared by text + voice
+            ├── voice_service.py    Gemini Live session wrapper: open_session (per-user key), build_live_config (text prompt + VOICE_MODE_INSTRUCTION, locked voice, tools, transcription)
+            └── voice_tools.py      bridge: LangChain tools → Gemini FunctionDeclarations + a voice-only score_word (blocking) tool → scoring_service; VoiceToolExecutor runs calls server-side
 ```
 
 ## API surface
@@ -247,6 +276,7 @@ ENG/
 - **Auth:** `GET /api/auth/google/login` (→ Google consent), `GET /api/auth/google/callback` (verify → session cookie → redirect to frontend; failure → `frontend_url/?auth_error=1`), `GET /api/auth/me` (profile + `has_persona` + `has_key`/`tier`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires the session cookie (401 without it) and is scoped to that user.
 - **Model (BYO key):** `GET /api/model/tiers` (Swift/Sage catalogue), `GET /api/model/status` (`{has_key, tier}`, never the key), `POST /api/model/key` (`{api_key, tier}` → verify → encrypt → store; 400 on bad key), `PUT /api/model/tier` (`{tier}` switch). LLM-using routes (`POST /api/chat/...`, `POST /api/conversations`, `.../opener`) return **403** if the user has no key/tier yet.
 - **Personas (multi-persona):** `GET /api/personas` (list, each with `is_active`/`conversation_count`), `POST /api/personas` (create), `PUT /api/personas/{id}` (edit), `PUT /api/personas/{id}/avatar` (public URL), `POST /api/personas/{id}/activate` (switch), `DELETE /api/personas/{id}` (delete + cascade its chats; keeps ≥1). Discover: `GET /api/personas/catalog` + `POST /api/personas/catalog/{catalog_id}/use` (copy a curated figure into the user's personas).
+- **Voice (real-time audio, Gemini Live):** `WS /api/voice/ws/{conversation_id}` (duplex audio; cookie-auth on handshake; server-side tools + per-turn message persistence), `GET /api/voice/voices` (voice catalogue + `audition_url`), `GET /api/voice/status` (`{available}` = user has a key/tier).
 - `POST /api/conversations` — new chat (scoped to the active persona); picks target words; returns topic suggestions (first LLM call of a new chat)
 - `PATCH /api/conversations/{id}/category` — set topic after user picks one
 - `POST /api/conversations/{id}/opener` — persona opens the chat itself (time/memory aware)
@@ -272,6 +302,8 @@ ToolMessage pairs reconstructed with original IDs — required by providers) →
 `bind_tools(...).invoke()` loop (max 6 iterations) executing tools, using the user's key+model →
 5. store assistant message with `tool_calls` JSON → 6. auto-title after first exchange (same
 per-user model) → 7. judge user message (same per-user model) → scoring events returned in the response.
+
+(Voice mode has its OWN flow — see concept 11 + `routers/voice.py`: a WebSocket streams audio to Gemini Live, tools run server-side per `tool_call` event, scoring is inline via `score_word` (no judge), and each turn's transcript is persisted as messages.)
 
 ## Conventions & decisions
 
@@ -316,8 +348,16 @@ per-user model) → 7. judge user message (same per-user model) → scoring even
 - No summarization/compaction of history yet; no vector search yet (BM25 only) — both planned.
 - Model per user = their chosen tier (Swift `gemini-3.1-flash-lite` / Sage `gemini-3.5-flash`,
   from `config.MODEL_TIERS`); governs chat + judge + utility. Not `.env`-driven anymore.
+  Voice mode uses a SEPARATE fixed live model (`config.voice_model`, not the tier) but the
+  user's OWN key still pays for it.
 - Gemini quirk: `AIMessage.content` can be a LIST of content blocks, not a str — always
   flatten via `chat_service._flatten_content` before treating replies as text.
+- Voice mode uses the RAW `google-genai` SDK (not LangChain): the Live API has NO automatic
+  tool-loop, so we execute each `tool_call` server-side and `send_tool_response` ourselves
+  (`routers/voice.py`); `session.receive()` ends per turn, so the receive loop wraps it in
+  `while True`. Adding a shared agent tool in `agent_tools.py` exposes it to voice too (via the
+  `voice_tools` bridge → `FunctionDeclaration`); voice-only tools (`score_word`) live in
+  `voice_tools.py`. Adding a voice = one row in `config.VOICES` (nothing else changes).
 
 ## Testing — use judgment, don't run blindly
 

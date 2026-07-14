@@ -2,16 +2,90 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Check, ChevronRight, Loader2, Pencil, Plus, Settings2, Trash2, UserPlus, X } from 'lucide-react';
+import { Check, ChevronRight, ExternalLink, Loader2, Pencil, Plus, Settings2, Trash2, UserPlus, Volume2, X } from 'lucide-react';
 
 import * as api from '../api';
-import { usePersonaCatalog, usePersonas } from '../hooks/useApi';
+import { usePersonaCatalog, usePersonas, useVoices } from '../hooks/useApi';
 import { DiscoverCardSkeleton, PersonaAvatar, PersonaRowSkeleton, Skeleton } from './Shared';
 
 const RELATIONS = ['Best friend', 'Mentor', 'Girlfriend', 'Boyfriend', 'Teacher'];
+const GENDERS = [
+  { key: 'male', label: 'Male' },
+  { key: 'female', label: 'Female' },
+];
 
 // ── The persona identity form — shared by "add new" and "edit". Mirrors onboarding step 1,
 //    plus an optional public avatar URL. Self-contained so onboarding stays untouched. ─────
+// A modal that lists every Gemini Live voice (grouped by gender) with its tone descriptor,
+// plus a link to hear them in Google AI Studio. Choosing one sets the persona's voice.
+function VoicePicker({ current, gender, onPick, onClose }) {
+  const voices = useVoices();
+  const list = voices.data?.voices || [];
+  const auditionUrl = voices.data?.audition_url;
+  const groups = [
+    { key: 'female', label: 'Female voices' },
+    { key: 'male', label: 'Male voices' },
+  ];
+  // Show the persona's gender group first when known.
+  const ordered = gender === 'male' ? [groups[1], groups[0]] : groups;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm bg-bg/60" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-bg border border-border rounded-3xl shadow-card w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+          <div className="font-serif-italic text-lg text-text">Choose a voice</div>
+          <button onClick={onClose} className="text-muted hover:text-text cursor-pointer"><X size={18} /></button>
+        </div>
+        <div className="px-5 py-3 border-b border-border shrink-0">
+          {auditionUrl && (
+            <a
+              href={auditionUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-[12.5px] text-accent hover:underline"
+            >
+              <Volume2 size={13} /> Hear every voice in Google AI Studio <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
+        <div className="overflow-y-auto px-3 py-3 space-y-4">
+          {voices.isLoading && <div className="text-sm text-muted px-2 py-4">Loading voices…</div>}
+          {ordered.map((g) => (
+            <div key={g.key}>
+              <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 px-2 mb-1.5">{g.label}</div>
+              <div className="grid grid-cols-2 gap-2">
+                {list.filter((v) => v.gender === g.key).map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => { onPick(v.id); onClose(); }}
+                    className={`text-left rounded-2xl px-3 py-2.5 border cursor-pointer transition-colors ${
+                      current === v.id
+                        ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                        : 'border-border-2 bg-surface hover:bg-bg'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13.5px] font-semibold text-text">{v.label}</span>
+                      {current === v.id && <Check size={14} className="text-accent" />}
+                    </div>
+                    <div className="text-[11.5px] text-muted mt-0.5">{v.tone}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function PersonaForm({ initial, submitLabel, busy, onSubmit, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [relation, setRelation] = useState(
@@ -20,6 +94,9 @@ function PersonaForm({ initial, submitLabel, busy, onSubmit, onCancel }) {
   const [customRelation, setCustomRelation] = useState(
     initial?.relation && !RELATIONS.includes(initial.relation) ? initial.relation : ''
   );
+  const [gender, setGender] = useState(initial?.gender || '');
+  const [voice, setVoice] = useState(initial?.voice || '');
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const [personality, setPersonality] = useState(initial?.personality || '');
   const [speakingStyle, setSpeakingStyle] = useState(initial?.speaking_style || '');
   const [avatarUrl, setAvatarUrl] = useState(initial?.avatar_url || '');
@@ -32,6 +109,8 @@ function PersonaForm({ initial, submitLabel, busy, onSubmit, onCancel }) {
     onSubmit({
       name: name.trim(),
       relation: effectiveRelation,
+      gender,
+      voice,
       personality: personality.trim(),
       speaking_style: speakingStyle.trim(),
       avatar_url: avatarUrl.trim(),
@@ -125,6 +204,55 @@ function PersonaForm({ initial, submitLabel, busy, onSubmit, onCancel }) {
           className="border-none outline-none text-[14px] mt-1 w-full bg-transparent text-text-3"
         />
       </div>
+
+      {/* Gender + Voice (for voice mode) */}
+      <div>
+        <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2 mb-2">
+          Gender — optional
+        </div>
+        <div className="flex gap-2">
+          {GENDERS.map((g) => (
+            <button
+              key={g.key}
+              type="button"
+              onClick={() => setGender(gender === g.key ? '' : g.key)}
+              className={`rounded-full px-4 py-1.5 text-[13px] cursor-pointer transition-colors ${
+                gender === g.key
+                  ? 'bg-accent text-white font-semibold shadow-accent border-none'
+                  : 'bg-surface text-text-3 border border-border-2'
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setVoicePickerOpen(true)}
+        className="bg-surface border border-border-2 rounded-2xl px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-bg transition-colors text-left"
+      >
+        <div>
+          <div className="text-[11px] font-semibold tracking-wider uppercase text-muted-2">
+            Voice — for talking out loud
+          </div>
+          <div className="text-[14px] text-text mt-0.5 flex items-center gap-2">
+            <Volume2 size={14} className="text-accent" />
+            {voice ? voice : <span className="text-muted-2">Default (picked from gender)</span>}
+          </div>
+        </div>
+        <ChevronRight size={16} className="text-muted-2" />
+      </button>
+
+      {voicePickerOpen && (
+        <VoicePicker
+          current={voice}
+          gender={gender}
+          onPick={setVoice}
+          onClose={() => setVoicePickerOpen(false)}
+        />
+      )}
 
       <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5">
         <button
