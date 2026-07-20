@@ -34,7 +34,7 @@ export function formatThreadTime(dateStr) {
 
 export function nowClockLabel() {
   const d = new Date();
-  return d.toLocaleDateString([], { weekday: 'short' }) + ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · your time';
+  return d.toLocaleDateString([], { weekday: 'short' }) + ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 export function parsePersonaName(raw) {

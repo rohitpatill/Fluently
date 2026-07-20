@@ -6,12 +6,36 @@ import { toast } from 'sonner';
 import { ChevronDown, Menu, Mic, Plus, Search, Send, Sparkles, Trash2, Wrench, X } from 'lucide-react';
 
 import * as api from '../api';
-import { useConversations, useMessages, useVoiceStatus } from '../hooks/useApi';
+import { useConversations, useMessages, useVoiceStatus, useWords } from '../hooks/useApi';
 import { useDevMode } from '../hooks/useDevMode';
 import useKeyboardInset from '../hooks/useKeyboardInset';
 import { PersonaAvatar, Spinner, ThreadItemSkeleton, MessageBubbleSkeleton } from './Shared';
 import VoiceOverlay from './VoiceOverlay';
+import { WordGlossProvider, GlossedText } from './WordGloss';
 import { formatThreadTime, nowClockLabel } from '../utils';
+
+// Max characters for a TEXT chat message. Configurable via VITE_MAX_MESSAGE_CHARS (Vite env,
+// baked at build); falls back to 1200 (~200 words, a paragraph or two) if unset/invalid. Voice
+// mode is unaffected — this is a UI guard to keep the app conversation-shaped (a huge paste wrecks
+// the per-message judge and bloats every future prompt, since the whole history is resent each
+// turn). It's the user's own key, so this is about product fit, not cost.
+const MAX_MESSAGE_CHARS = (() => {
+  const raw = Number(import.meta.env.VITE_MAX_MESSAGE_CHARS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 1200;
+})();
+
+// Custom react-markdown renderers that run message text through the word-gloss matcher.
+// react-markdown has no `text` element hook, so we override the text-bearing block/inline
+// elements and gloss their string children (nested non-string children pass through untouched).
+const glossEl = (Tag) => ({ children, node, ...props }) => (
+  <Tag {...props}><GlossedText>{children}</GlossedText></Tag>
+);
+const GLOSS_COMPONENTS = {
+  p: glossEl('p'),
+  strong: glossEl('strong'),
+  em: glossEl('em'),
+  li: glossEl('li'),
+};
 
 const CHIP_STYLES = {
   good: 'bg-[#EAF8F0] border-[#BFE8D2] text-[#1E7D4B]',
@@ -169,6 +193,7 @@ function TypingIndicator({ personaName, personaAvatar }) {
 export default function Chat({ personaName, personaAvatar = '', personaId = null }) {
   const queryClient = useQueryClient();
   const conversations = useConversations(personaId);
+  const words = useWords();
   const [devMode] = useDevMode();
 
   const [activeId, setActiveId] = useState(null);
@@ -287,6 +312,10 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
   async function send(text) {
     const content = (text ?? draft).trim();
     if (!content || typing || !activeId) return;
+    if (content.length > MAX_MESSAGE_CHARS) {
+      toast.error(`Message is too long — keep it under ${MAX_MESSAGE_CHARS.toLocaleString()} characters.`);
+      return;
+    }
     setDraft('');
     setPendingUser(content);
     setTyping(true);
@@ -632,6 +661,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
           </div>
         ) : (
           /* messages */
+          <WordGlossProvider words={words.data || []}>
           <div ref={scrollRef} className="flex-1 min-h-0 px-4 sm:px-6 md:px-[8%] py-5 md:py-7 flex flex-col gap-4 md:gap-5 overflow-y-auto">
             {messages.isLoading &&
               [false, true, false, true].map((mine, i) => <MessageBubbleSkeleton key={i} mine={mine} />)}
@@ -641,7 +671,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
                   <div className="mt-1"><PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="xs" /></div>
                   <div className="min-w-0">
                     <div className="bg-surface border border-border rounded-[4px_18px_18px_18px] px-4 py-3 md:px-4.5 text-[14px] md:text-[14.5px] leading-relaxed text-text-2 shadow-[0_3px_10px_-6px_rgba(26,29,39,.1)] break-words [&_p]:m-0 [&_p+p]:mt-2">
-                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                      <ReactMarkdown components={GLOSS_COMPONENTS}>{m.content}</ReactMarkdown>
                     </div>
                     {devMode && <ToolCalls calls={m.tool_calls} />}
                   </div>
@@ -649,7 +679,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
               ) : (
                 <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-end gap-2">
                   <div className="max-w-[88%] sm:max-w-[560px] bg-accent text-white rounded-[18px_4px_18px_18px] px-4 py-3 md:px-4.5 text-[14px] md:text-[14.5px] leading-relaxed shadow-accent whitespace-pre-wrap break-words">
-                    {m.content}
+                    <GlossedText onAccent>{m.content}</GlossedText>
                   </div>
                   {chipsByMessage[m.id] ? (
                     <ScoringChips events={chipsByMessage[m.id]} />
@@ -668,6 +698,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
             )}
             <AnimatePresence>{typing && <TypingIndicator personaName={personaName} personaAvatar={personaAvatar} />}</AnimatePresence>
           </div>
+          </WordGlossProvider>
         )}
 
         {/* composer */}
@@ -677,7 +708,8 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
               <textarea
                 ref={inputRef}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => setDraft(e.target.value.slice(0, MAX_MESSAGE_CHARS))}
+                maxLength={MAX_MESSAGE_CHARS}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -706,6 +738,13 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
                 <Send size={15} />
               </button>
             </div>
+            {/* Character counter — only surfaces as the user nears the cap, so it's invisible in
+                normal chatting and only nudges on a large paste. */}
+            {draft.length >= MAX_MESSAGE_CHARS * 0.9 && (
+              <div className={`text-right text-[11px] mt-1.5 pr-1 ${draft.length >= MAX_MESSAGE_CHARS ? 'text-red font-semibold' : 'text-muted-2'}`}>
+                {draft.length.toLocaleString()}/{MAX_MESSAGE_CHARS.toLocaleString()}
+              </div>
+            )}
           </div>
         )}
       </div>

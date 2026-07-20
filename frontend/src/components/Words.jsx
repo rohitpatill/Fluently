@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ChevronDown, Loader2, NotebookPen, Pencil, Plus, Trophy } from 'lucide-react';
+import { ChevronDown, Loader2, NotebookPen, Pencil, Plus, Search, Trophy, X } from 'lucide-react';
 
 import * as api from '../api';
 import { useDashboardStats, useWordEvents, useWords } from '../hooks/useApi';
@@ -101,12 +101,14 @@ function PersonalNote({ word }) {
         </div>
         <textarea
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => setDraft(e.target.value.slice(0, 200))}
           autoFocus
           rows={2}
+          maxLength={200}
           placeholder="Your own way to remember it — where you saw it, a hook, a translation…"
           className="w-full bg-surface border border-border-2 rounded-lg px-3 py-2 text-[13.5px] outline-none text-text resize-none leading-relaxed focus:border-accent-soft-border"
         />
+        <div className="text-right text-[10.5px] text-muted-2 mt-1">{draft.length}/200</div>
         <div className="flex gap-2 mt-2">
           <button
             onClick={() => save.mutate(draft.trim())}
@@ -256,6 +258,7 @@ export default function Words() {
   const stats = useDashboardStats();
   const [newWord, setNewWord] = useState('');
   const [expandedId, setExpandedId] = useState(null);
+  const [search, setSearch] = useState('');
 
   const add = useMutation({
     mutationFn: (text) => api.addWord(text, text.includes(' ') ? 'phrase' : 'word'),
@@ -270,6 +273,10 @@ export default function Words() {
   });
 
   const sorted = useMemo(() => [...(words.data || [])].sort((a, b) => b.score - a.score), [words.data]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? sorted.filter((w) => w.text.toLowerCase().includes(q)) : sorted;
+  }, [sorted, search]);
   const s = stats.data;
 
   return (
@@ -300,6 +307,27 @@ export default function Words() {
           </div>
         </div>
 
+        {sorted.length > 0 && (
+          <div className="mt-5 flex items-center gap-2 bg-surface border border-border-2 rounded-xl px-3.5 focus-within:border-accent-soft-border transition-colors max-w-full sm:max-w-[360px]">
+            <Search size={15} className="text-muted-2 shrink-0" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search your words…"
+              className="border-none outline-none bg-transparent text-[13.5px] py-2.5 w-full text-text"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                title="Clear search"
+                className="text-muted-2 hover:text-muted bg-transparent border-none cursor-pointer p-0.5 -mr-1 shrink-0 transition-colors"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-6">
           {stats.isLoading ? (
             Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
@@ -324,9 +352,17 @@ export default function Words() {
               </p>
             </div>
           )}
-          {!words.isLoading && sorted.length > 0 && (
+          {!words.isLoading && sorted.length > 0 && filtered.length === 0 && (
+            <div className="text-center py-12 px-8">
+              <p className="m-0 text-[14px] font-semibold">No matches</p>
+              <p className="mt-1.5 mb-0 text-[13px] text-muted font-serif-italic">
+                No word matches “{search.trim()}”.
+              </p>
+            </div>
+          )}
+          {!words.isLoading && filtered.length > 0 && (
             <motion.div {...REVEAL}>
-              {sorted.map((w) => (
+              {filtered.map((w) => (
                 <WordRow key={w.id} word={w} expanded={expandedId === w.id} onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)} />
               ))}
             </motion.div>

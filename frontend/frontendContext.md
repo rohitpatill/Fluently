@@ -19,6 +19,7 @@ NO router — state-based view switching · NO hand-written CSS files beyond ind
 | `package.json` | Scripts: `dev`, `build`, `preview`. |
 | `Fluent App.dc.html`, `Fluent.dc.html`, `support.js`, `.thumbnail` | ORIGINAL design prototypes (non-React). Reference/inspiration only — never imported, never delete. |
 | `public/` | favicon.svg (+ leftover icons.svg from scaffold). |
+| `.env` (+ `.env.example`) | Vite build-time config: `VITE_API_URL` (backend base), `VITE_MAX_MESSAGE_CHARS` (text-message char cap, default 1200). No secrets. |
 
 ## Rules for editing here
 - `npm run build` must pass after every change.
