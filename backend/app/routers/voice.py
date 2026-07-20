@@ -136,7 +136,9 @@ class _TurnBuffer:
 
         # Assistant message: store tool_calls in the SAME shape text chat uses
         # ({id,name,args,output}) so Developer mode renders them identically. Voice tool calls
-        # have no provider id, so we synthesize a stable one.
+        # have no provider id, so we synthesize a stable one. EXCLUDE `score_word`: it's the
+        # voice-only scoring mechanism (text scores via the judge, not a tool) and is already
+        # surfaced as score chips on the user message — showing it as a "tool call" is just noise.
         tool_calls = [
             {
                 "id": f"voice-{i}",
@@ -145,6 +147,7 @@ class _TurnBuffer:
                 "output": rec["output"] if isinstance(rec["output"], str) else json.dumps(rec["output"]),
             }
             for i, rec in enumerate(records)
+            if rec["name"] != "score_word"
         ]
         if assistant_text or tool_calls:
             assistant_msg = Message(
