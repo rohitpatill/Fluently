@@ -484,7 +484,26 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
                   >
                     <div className="flex justify-between items-center gap-2">
                       <span className="text-[13.5px] font-semibold truncate">{t.title}</span>
-                      <span className="text-[11px] text-muted-2 shrink-0">{formatThreadTime(t.updated_at)}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] text-muted-2">{formatThreadTime(t.updated_at)}</span>
+                        {/* mobile has no hover — the delete affordance is always visible here */}
+                        {confirmDeleteId === t.id ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeThread(t.id); }}
+                            className="text-[11px] font-semibold text-red bg-transparent border-none cursor-pointer p-1 -m-1"
+                          >
+                            sure?
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(t.id); setTimeout(() => setConfirmDeleteId(null), 2500); }}
+                            title="Delete conversation"
+                            className="text-muted-2 hover:text-red bg-transparent border-none cursor-pointer p-1 -m-1"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {t.category && <span className="text-[11px] text-accent">{t.category}</span>}
                   </div>

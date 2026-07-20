@@ -277,9 +277,10 @@ ENG/
 - **Model (BYO key):** `GET /api/model/tiers` (Swift/Sage catalogue), `GET /api/model/status` (`{has_key, tier}`, never the key), `POST /api/model/key` (`{api_key, tier}` → verify → encrypt → store; 400 on bad key), `PUT /api/model/tier` (`{tier}` switch). LLM-using routes (`POST /api/chat/...`, `POST /api/conversations`, `.../opener`) return **403** if the user has no key/tier yet.
 - **Personas (multi-persona):** `GET /api/personas` (list, each with `is_active`/`conversation_count`), `POST /api/personas` (create), `PUT /api/personas/{id}` (edit), `PUT /api/personas/{id}/avatar` (public URL), `POST /api/personas/{id}/activate` (switch), `DELETE /api/personas/{id}` (delete + cascade its chats; keeps ≥1). Discover: `GET /api/personas/catalog` + `POST /api/personas/catalog/{catalog_id}/use` (copy a curated figure into the user's personas).
 - **Voice (real-time audio, Gemini Live):** `WS /api/voice/ws/{conversation_id}` (duplex audio; cookie-auth on handshake; server-side tools + per-turn message persistence), `GET /api/voice/voices` (voice catalogue + `audition_url`), `GET /api/voice/status` (`{available}` = user has a key/tier).
-- `POST /api/conversations` — new chat (scoped to the active persona); picks target words; returns topic suggestions (first LLM call of a new chat)
+- `POST /api/conversations` — new chat (scoped to the active persona); picks target words; topic suggestions only if `suggest_topics:true` (the frontend passes false so "+" opens instantly; topics are fetched on demand via `.../{id}/topics`)
 - `PATCH /api/conversations/{id}/category` — set topic after user picks one
 - `POST /api/conversations/{id}/opener` — persona opens the chat itself (time/memory aware)
+- `POST /api/conversations/{id}/topics` — on-demand topic suggestions for an existing chat (the "Suggest topics" button; create no longer suggests by default, so "+" is instant)
 - `GET /api/conversations` / `GET .../{id}` / `GET .../{id}/messages` (each msg has `tool_calls`; user msgs also carry `word_events` so chips + dev-mode tool calls survive refresh) / `DELETE .../{id}`
 - `POST /api/conversations/search` — BM25/regex search (same engine as the agent tool)
 - `POST /api/chat/{conversation_id}` — send message, get assistant reply + scoring events
@@ -303,7 +304,7 @@ ToolMessage pairs reconstructed with original IDs — required by providers) →
 5. store assistant message with `tool_calls` JSON → 6. auto-title after first exchange (same
 per-user model) → 7. judge user message (same per-user model) → scoring events returned in the response.
 
-(Voice mode has its OWN flow — see concept 11 + `routers/voice.py`: a WebSocket streams audio to Gemini Live, tools run server-side per `tool_call` event, scoring is inline via `score_word` (no judge), and each turn's transcript is persisted as messages.)
+(Voice mode has its OWN flow — see concept 11 + `routers/voice.py`: a WebSocket streams audio to Gemini Live, tools run server-side per `tool_call` event, scoring is inline via `score_word` (no judge), and each turn's transcript is persisted as messages — and after the first turn it auto-titles the conversation via the SAME `chat_service._maybe_set_title` as text.)
 
 ## Conventions & decisions
 
