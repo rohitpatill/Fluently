@@ -37,7 +37,7 @@ from ..config import DEFAULT_VOICE, VOICES, settings
 from ..deps import get_current_user_obj
 from ..models import Message, User
 from ..schemas import VoiceCatalogOut, VoiceOut
-from ..services import auth_service, voice_service
+from ..services import auth_service, chat_service, model_service, voice_service
 from ..services.model_service import NoModelConfigured
 from ..services.voice_tools import VoiceToolExecutor
 
@@ -158,6 +158,22 @@ class _TurnBuffer:
         repo.touch_conversation(self.conversation.id)
 
 
+async def _maybe_title(conversation, user_id: str) -> None:
+    """Auto-title a voice conversation after its first exchange — same flow as text chat.
+
+    Reuses chat_service._maybe_set_title (self-guards on title=="New conversation" and
+    >=2 messages, so calling it after every turn is safe/idempotent). Runs off the event
+    loop via to_thread since the title LLM call is blocking, and swallows all errors so a
+    failed title never disrupts the live session."""
+    if conversation.title != "New conversation" or len(conversation.messages) < 2:
+        return
+    try:
+        resolved = model_service.resolve_for_user(user_id)
+        await asyncio.to_thread(chat_service._maybe_set_title, conversation, resolved)
+    except Exception:
+        pass
+
+
 # --- Relay loops ---------------------------------------------------------------------------
 
 async def _browser_to_gemini(ws: WebSocket, session) -> None:
@@ -211,6 +227,8 @@ async def _gemini_to_browser(ws: WebSocket, session, buffer: _TurnBuffer, execut
 
                 if sc.turn_complete:
                     buffer.flush()  # persist this turn as messages
+                    # Title after the first exchange, exactly like text chat (self-guards).
+                    await _maybe_title(buffer.conversation, buffer.conversation.user_id)
                     await ws.send_json({"type": "turn_complete"})
 
             # --- Tool calls (execute server-side, reply to the model) ---
@@ -288,6 +306,8 @@ async def voice_ws(ws: WebSocket, conversation_id: str):
         # Persist any half-finished turn's transcript so nothing is lost on abrupt close.
         try:
             buffer.flush()
+            # Title if this was the first exchange and no turn_complete fired to do it.
+            await _maybe_title(buffer.conversation, buffer.conversation.user_id)
         except Exception:
             pass
         try:

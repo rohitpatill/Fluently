@@ -20,6 +20,18 @@ def test_create_with_topic_suggestions_mocked(client):
     assert r.json()["topics"] == []  # mocked LLM returns empty list, no crash
 
 
+def test_suggest_topics_for_existing_conversation(client):
+    cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
+    r = client.post(f"/api/conversations/{cid}/topics")
+    assert r.status_code == 200
+    assert r.json() == []  # mocked LLM returns empty list, no crash
+
+
+def test_suggest_topics_missing_conversation(client):
+    r = client.post("/api/conversations/deadbeefdeadbeefdeadbeef/topics")
+    assert r.status_code == 404
+
+
 def test_set_category(client):
     cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
     r = client.patch(f"/api/conversations/{cid}/category", params={"category": "science"})

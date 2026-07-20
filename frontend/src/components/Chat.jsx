@@ -182,6 +182,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
   const [threadsOpen, setThreadsOpen] = useState(false);
   const [clock, setClock] = useState(nowClockLabel());
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [topicsLoading, setTopicsLoading] = useState(false); // "Suggest topics" clicked → topic cards loading
   const voiceStatus = useVoiceStatus();
 
   const messages = useMessages(activeId);
@@ -207,13 +208,18 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
       if (list.length) setActiveId(list[0].id);
       return;
     }
+    // Don't fall back while a refetch is in flight: right after a new chat is created
+    // we invalidate ['conversations'], so the cached list is briefly the OLD one that
+    // doesn't yet contain the just-created activeId. Treating that as "stale" would
+    // bounce the user back to the previous chat. Only judge staleness on a settled list.
+    if (conversations.isFetching) return;
     if (!list.some((c) => c.id === activeId)) {
       // Stale selection: clear it (+ any optimistic bubbles) and fall back to the newest.
       setActiveId(list.length ? list[0].id : null);
       setPendingUser(null);
       setTyping(false);
     }
-  }, [conversations.data, conversations.isLoading, activeId]);
+  }, [conversations.data, conversations.isLoading, conversations.isFetching, activeId]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -230,15 +236,34 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
   }, [conversations.data, threadQuery]);
 
   const newChat = useMutation({
-    mutationFn: () => api.createConversation({ suggest_topics: true }),
-    onSuccess: ({ conversation, topics }) => {
-      setTopicsByConv((m) => ({ ...m, [conversation.id]: topics }));
+    // Create WITHOUT topic suggestions so there's no LLM wait — we land in the new
+    // (empty) chat instantly. Topics are only fetched if the user asks (suggestTopics).
+    mutationFn: () => api.createConversation({ suggest_topics: false }),
+    onMutate: () => {
+      setPendingUser(null);
+      setTyping(false);
+    },
+    onSuccess: ({ conversation }) => {
       setActiveId(conversation.id);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       inputRef.current?.focus();
     },
     onError: (e) => toast.error(e.message),
   });
+
+  // Fetch topic suggestions for the CURRENT chat on demand (the "Suggest topics" button).
+  async function suggestTopics() {
+    if (!activeId || topicsLoading) return;
+    setTopicsLoading(true);
+    try {
+      const list = await api.suggestTopics(activeId);
+      setTopicsByConv((m) => ({ ...m, [activeId]: list }));
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setTopicsLoading(false);
+    }
+  }
 
   async function afterAssistantReply(data) {
     if (data?.scoring_events?.length) {
@@ -526,14 +551,30 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
             </button>
           </div>
         ) : isEmptyConversation ? (
-          /* topic cards */
+          /* empty new chat: two-choice landing — chat now, or ask for topic suggestions */
           <div className="flex-1 flex flex-col items-center justify-start md:justify-center px-4 sm:px-6 md:px-12 py-7 gap-6 md:gap-7 overflow-y-auto">
             <div className="flex flex-col items-center text-center">
               <div className="mb-4 flex justify-center"><PersonaAvatar name={personaName} avatarUrl={personaAvatar} size="lg" /></div>
-              <h2 className="m-0 text-[26px] font-bold tracking-tight">{greeting}</h2>
-              <p className="mt-2 mb-0 text-[15px] text-muted font-serif-italic">Pick a topic below, or start typing whatever's on your mind.</p>
+              <h2 className="m-0 text-[24px] md:text-[26px] font-bold tracking-tight">{greeting}</h2>
+              <p className="mt-2 mb-0 text-[14px] md:text-[15px] text-muted font-serif-italic">
+                Just start typing below, or pick how you'd like to begin.
+              </p>
             </div>
-            {topics.length > 0 && (
+
+            {topicsLoading ? (
+              /* topics requested — skeleton cards while the LLM responds */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 md:gap-4 w-full max-w-[860px]">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="bg-surface border border-border-2 rounded-[18px] p-5 flex flex-col gap-2.5 shadow-card animate-pulse">
+                    <span className="self-start h-4 w-16 rounded-full bg-[#EEF0F4]" />
+                    <span className="h-4 w-3/4 rounded bg-[#EEF0F4]" />
+                    <span className="h-3 w-full rounded bg-[#F1F2F6]" />
+                    <span className="h-3 w-5/6 rounded bg-[#F1F2F6]" />
+                  </div>
+                ))}
+              </div>
+            ) : topics.length > 0 ? (
+              /* topic cards */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 md:gap-4 w-full max-w-[860px]">
                 {topics.map((tc, i) => (
                   <motion.button
@@ -550,17 +591,25 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
                   </motion.button>
                 ))}
               </div>
+            ) : (
+              /* two-choice landing buttons — fully responsive (stack on phone, row on ≥sm) */
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 w-full max-w-[520px]">
+                <button
+                  onClick={letPersonaStart}
+                  disabled={typing}
+                  className="flex-1 bg-accent hover:bg-accent-hover text-white border-none rounded-2xl px-5 py-3.5 text-sm font-semibold shadow-accent cursor-pointer transition-colors disabled:opacity-60"
+                >
+                  {typing ? `${personaName} is starting…` : `Let ${personaName} start ✦`}
+                </button>
+                <button
+                  onClick={suggestTopics}
+                  disabled={typing}
+                  className="flex-1 bg-surface hover:bg-[#F1F2F6] text-text-2 border border-border-2 rounded-2xl px-5 py-3.5 text-sm font-semibold shadow-card cursor-pointer transition-colors disabled:opacity-60"
+                >
+                  Suggest topics
+                </button>
+              </div>
             )}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3.5">
-              <span className="text-[13px] text-muted-2">or</span>
-              <button
-                onClick={letPersonaStart}
-                disabled={typing}
-                className="bg-accent hover:bg-accent-hover text-white border-none rounded-full px-5 py-2.5 text-sm font-semibold shadow-accent cursor-pointer transition-colors disabled:opacity-60"
-              >
-                {typing ? `${personaName} is starting…` : `Let ${personaName} start ✦`}
-              </button>
-            </div>
           </div>
         ) : (
           /* messages */

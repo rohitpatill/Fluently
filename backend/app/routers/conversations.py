@@ -51,6 +51,23 @@ def create_conversation(
     return NewConversationResponse(conversation=conv, topics=topics)
 
 
+@router.post("/{conversation_id}/topics", response_model=list[TopicSuggestion])
+def suggest_topics_for_conversation(
+    conversation_id: str, user_id: str = Depends(require_model_configured)
+):
+    """On-demand topic suggestions for an existing chat (the "Suggest topics" button).
+    Kept separate from create so opening a new chat costs no LLM call."""
+    conv = repo.get_conversation(conversation_id, user_id)
+    if not conv:
+        raise HTTPException(404, "Conversation not found")
+    words = repo.list_words(user_id)
+    targets = [w for w in words if w.id in set(conv.target_word_ids)]
+    return [
+        TopicSuggestion(title=t.title, description=t.description, category=t.category)
+        for t in topic_service.suggest_topics(targets, user_id, persona_id=conv.persona_id)
+    ]
+
+
 @router.get("/{conversation_id}", response_model=ConversationOut)
 def get_conversation(conversation_id: str, user_id: str = Depends(get_current_user)):
     conv = repo.get_conversation(conversation_id, user_id)

@@ -16,6 +16,9 @@ frontend/dist/
 frontend/dist-ssr/
 frontend/*.local
 
+# --- keep-alive pingers (deployed separately, not part of main app) ---
+keep-alive/
+
 # --- editors / OS ---
 .vscode/*
 !.vscode/extensions.json

@@ -65,6 +65,9 @@ export const setConversationCategory = (id, category) =>
 export const requestOpener = (id) =>
   request(`/api/conversations/${id}/opener`, { method: 'POST' });
 
+export const suggestTopics = (id) =>
+  request(`/api/conversations/${id}/topics`, { method: 'POST' });
+
 export const searchConversations = (params) =>
   request('/api/conversations/search', { method: 'POST', body: JSON.stringify(params) });
 
