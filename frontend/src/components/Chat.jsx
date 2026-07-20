@@ -215,6 +215,16 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
   const inputRef = useRef(null);
   const { inset: keyboardInset } = useKeyboardInset();
 
+  // Auto-focus the composer ONLY on desktop. On phones, programmatic focus force-opens the
+  // soft keyboard (jarring when a reply arrives / a new chat opens) — mobile users expect the
+  // keyboard only when THEY tap the input, like WhatsApp. `md` breakpoint = 768px, matching the
+  // sidebar-vs-drawer split elsewhere in this file.
+  function focusComposer() {
+    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches) {
+      inputRef.current?.focus();
+    }
+  }
+
   useEffect(() => {
     const t = setInterval(() => setClock(nowClockLabel()), 30000);
     return () => clearInterval(t);
@@ -271,7 +281,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
     onSuccess: ({ conversation }) => {
       setActiveId(conversation.id);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      inputRef.current?.focus();
+      focusComposer();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -331,7 +341,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
       setPendingUser(null);
     } finally {
       setTyping(false);
-      inputRef.current?.focus();
+      focusComposer();
     }
   }
 
@@ -356,7 +366,7 @@ export default function Chat({ personaName, personaAvatar = '', personaId = null
       toast.error(e.message);
     } finally {
       setTyping(false);
-      inputRef.current?.focus();
+      focusComposer();
     }
   }
 
