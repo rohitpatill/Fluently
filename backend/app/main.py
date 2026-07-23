@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import mongo
 from .config import settings
 from .routers import (
+    assistant,
     auth,
     chat,
     conversations,
@@ -53,6 +54,7 @@ app.include_router(memory.router)
 app.include_router(model.router)
 app.include_router(personas.router)
 app.include_router(voice.router)
+app.include_router(assistant.router)
 app.include_router(dashboard.router)
 app.include_router(settings_router.router)
 

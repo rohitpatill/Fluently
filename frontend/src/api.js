@@ -151,6 +151,16 @@ export const voiceSocketUrl = (conversationId) => {
   return `${wsBase}/api/voice/ws/${conversationId}`;
 };
 
+// ---------- Fluently voice assistant (in-app help + hands-free actions) ----------
+export const getAssistantStatus = () => request('/api/assistant/status');
+
+// The WebSocket URL for the Fluently assistant. `tab` tells the assistant which screen the
+// user is currently on so it can ground its help. No conversation id — the session is ephemeral.
+export const assistantSocketUrl = (tab) => {
+  const wsBase = BASE_URL.replace(/^http/, 'ws');
+  return `${wsBase}/api/assistant/ws?tab=${encodeURIComponent(tab || 'chat')}`;
+};
+
 // ---------- Model (bring-your-own-key + Swift/Sage tiers) ----------
 export const getModelTiers = () => request('/api/model/tiers');
 

@@ -124,3 +124,13 @@ export function useVoices({ enabled = true } = {}) {
     staleTime: Infinity,
   });
 }
+
+// Whether the Fluently in-app voice assistant is available (same gate as voice: BYO key + tier).
+export function useAssistantStatus({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['assistant-status'],
+    queryFn: api.getAssistantStatus,
+    enabled,
+    staleTime: 60_000,
+  });
+}
