@@ -184,6 +184,24 @@ naturally into conversations, judges how well the user produces them, and tracks
     form (NOT onboarding), with a link to audition voices in Google AI Studio. Discover figures ship a
     hand-picked voice. `services/voice_service.py` owns the live-session config (swap model = one line).
 
+12. **Fluently in-app voice assistant (BUILT)** — a SEPARATE voice feature from persona chat: the
+    **app itself** talks to the user (a draggable logo FAB, app-wide, opens a full-screen overlay)
+    to (a) explain how Fluently works and (b) do a few hands-free actions. It reuses ONLY the
+    Gemini Live transport + the user's OWN key — nothing else: **ephemeral (no messages persisted),
+    NOT scored (no judge, no `score_word`), and NOT tied to a persona/conversation.** Own module set:
+    `services/assistant_service.py` (prompt build from `prompts.ASSISTANT_SYSTEM_TEMPLATE` +
+    identity+memory+current-tab+active-persona-name; `get_status`; live config with a FIXED voice
+    `Puck` — the app's own voice, not the persona's), `services/assistant_tools.py` (FOUR tools,
+    each WRAPPING an existing code path: `get_my_status`, `create_persona`, `add_word`,
+    `switch_model_tier` — no memory-edit/search), `routers/assistant.py` (`WS /api/assistant/ws?tab=…`
+    that SPEAKS FIRST by name via `ASSISTANT_GREETING_INSTRUCTION`, executes tools server-side, and
+    pushes an `action` frame on success). The prompt has a hard **STAY-IN-SCOPE** boundary (help +
+    the 4 actions only; decline/redirect anything else — it is NOT a tutor/companion; never invent a
+    feature). Frontend: `hooks/useAssistantSession.js`, `components/AssistantOverlay.jsx` (glowing
+    Fluently sparkle, live captions, action toasts), `components/AssistantFab.jsx` (draggable, snaps
+    to an edge, default LEFT, position in localStorage). On a successful action App invalidates the
+    affected caches so the relevant screen updates live (no manual refresh).
+
 ## Repository layout
 
 ```
@@ -199,10 +217,11 @@ ENG/
 │   └── src/
 │       ├── main.jsx         React root: QueryClientProvider + sonner Toaster + font imports
 │       ├── index.css        Tailwind v4 @theme design tokens (colors/fonts/radii/shadows/keyframes)
-│       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle; model: getModelTiers/getModelStatus/setModelKey/setModelTier; voice: getVoices/getVoiceStatus/voiceSocketUrl (ws:// from base)
+│       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle; model: getModelTiers/getModelStatus/setModelKey/setModelTier; voice: getVoices/getVoiceStatus/voiceSocketUrl (ws:// from base); assistant: getAssistantStatus/assistantSocketUrl(tab)
 │       ├── utils.js         time formatting, persona/identity name parsing from raw markdown
 │       ├── hooks/useApi.js  TanStack Query hooks (health poll, me/auth [+has_key/tier], conversations, messages, words, stats, memory, model tiers, voice status/voices)
 │       ├── hooks/useVoiceSession.js  voice client: mic AudioWorklet (16k Int16 PCM) + WS + 24k playback (barge-in) + transcript/score/status state; start/stop
+│       ├── hooks/useAssistantSession.js  Fluently-assistant voice client (trimmed useVoiceSession sibling): same audio duplex over /api/assistant/ws, ephemeral, surfaces `actions` not `scores`
 │       ├── hooks/useDevMode.js localStorage-backed Developer-mode toggle (client-only, off by default)
 │       └── components/
 │           ├── Login.jsx       auth gate — single "Continue with Google" screen (Fluently-styled)
@@ -210,6 +229,8 @@ ENG/
 │           ├── Rail.jsx        responsive nav — desktop left rail; mobile bottom bar; 3 main tabs + Settings
 │           ├── Chat.jsx        desktop threads sidebar / mobile slide-out drawer, topic cards, opener, messages, scoring chips (now show the word name; mobile-safe width), dev tools, composer (mic button opens voice mode when available); persona-scoped conversation cache + stale-activeId guard
 │           ├── VoiceOverlay.jsx  full-screen voice mode: blurred backdrop, pulsing/rippling persona avatar reacting to audio, live transcript, word-score pops, stop button (uses useVoiceSession)
+│           ├── AssistantOverlay.jsx  full-screen Fluently-assistant help: glowing sparkle (not a persona), live captions, action toasts; fires onAction so App refreshes caches
+│           ├── AssistantFab.jsx  draggable logo FAB (app-wide) that opens the assistant: pointer-drag to move (tap opens), snaps to edge, default LEFT, position persisted
 │           ├── Words.jsx       stats cards, add+enrich, score bars, responsive rows, expandable detail with mobile-visible note edit
 │           ├── Memory.jsx      3 RAW markdown editors (identity/memory/persona) with Save → PUT .../raw
 │           ├── SettingsView.jsx Account + Log out, Personas (summary card), Brain (Swift/Sage switch + replace-key), Developer-mode toggle, data-management hard-delete cards
@@ -252,6 +273,7 @@ ENG/
         │   ├── memory.py        read/append/edit (old_string->new_string) memory files + PUT persona/form + POST onboarding (LLM-structured)
         │   ├── settings.py      data-management hard deletes (purge-all full-wipe also clears model key+tier)
         │   ├── voice.py         VOICE MODE (Gemini Live): WS /api/voice/ws/{conv_id} duplex audio + server-side tools + per-turn persist; GET /voices + /status
+        │   ├── assistant.py     FLUENTLY IN-APP ASSISTANT (Gemini Live): WS /api/assistant/ws?tab=… (help + hands-free actions; ephemeral, unscored, no persona; speaks first) + GET /status
         │   └── dashboard.py     GET /api/dashboard/stats
         └── services/
             ├── auth_service.py     Google OAuth flow + JWT session (build auth url, code exchange, ID-token verify, signed state/nonce, mint/decode session JWT)
@@ -268,6 +290,8 @@ ENG/
             ├── search_service.py   BM25/regex search (ranking in Python) over Mongo-loaded messages, context windows
             ├── agent_tools.py      LangChain @tool definitions (closure over user_id, not a db session) — shared by text + voice
             ├── voice_service.py    Gemini Live session wrapper: open_session (per-user key), build_live_config (text prompt + VOICE_MODE_INSTRUCTION, locked voice, tools, transcription)
+            ├── assistant_service.py Fluently in-app assistant: build_assistant_prompt (features + identity+memory+tab), get_status, build_live_config (fixed voice, assistant tools) — ephemeral/unscored/no-persona
+            ├── assistant_tools.py   assistant Live tools: get_my_status/create_persona/add_word/switch_model_tier (each wraps an existing code path) + AssistantToolExecutor
             └── voice_tools.py      bridge: LangChain tools → Gemini FunctionDeclarations + a voice-only score_word (blocking) tool → scoring_service; VoiceToolExecutor runs calls server-side
 ```
 
@@ -277,6 +301,7 @@ ENG/
 - **Model (BYO key):** `GET /api/model/tiers` (Swift/Sage catalogue), `GET /api/model/status` (`{has_key, tier}`, never the key), `POST /api/model/key` (`{api_key, tier}` → verify → encrypt → store; 400 on bad key), `PUT /api/model/tier` (`{tier}` switch). LLM-using routes (`POST /api/chat/...`, `POST /api/conversations`, `.../opener`) return **403** if the user has no key/tier yet.
 - **Personas (multi-persona):** `GET /api/personas` (list, each with `is_active`/`conversation_count`), `POST /api/personas` (create), `PUT /api/personas/{id}` (edit), `PUT /api/personas/{id}/avatar` (public URL), `POST /api/personas/{id}/activate` (switch), `DELETE /api/personas/{id}` (delete + cascade its chats; keeps ≥1). Discover: `GET /api/personas/catalog` + `POST /api/personas/catalog/{catalog_id}/use` (copy a curated figure into the user's personas).
 - **Voice (real-time audio, Gemini Live):** `WS /api/voice/ws/{conversation_id}` (duplex audio; cookie-auth on handshake; server-side tools + per-turn message persistence), `GET /api/voice/voices` (voice catalogue + `audition_url`), `GET /api/voice/status` (`{available}` = user has a key/tier).
+- **Assistant (Fluently in-app voice helper, Gemini Live):** `WS /api/assistant/ws?tab={screen}` (duplex audio; cookie-auth on handshake; help + hands-free tool actions; EPHEMERAL — no persistence, no scoring, no persona; speaks first by name), `GET /api/assistant/status` (`{available}` = user has a key/tier). Tools: `get_my_status`, `create_persona`, `add_word`, `switch_model_tier`.
 - `POST /api/conversations` — new chat (scoped to the active persona); picks target words; topic suggestions only if `suggest_topics:true` (the frontend passes false so "+" opens instantly; topics are fetched on demand via `.../{id}/topics`)
 - `PATCH /api/conversations/{id}/category` — set topic after user picks one
 - `POST /api/conversations/{id}/opener` — persona opens the chat itself (time/memory aware)
@@ -397,8 +422,16 @@ cd backend
 
 React 19 + Vite, JavaScript. Run: `cd frontend && npm install && npm run dev` (http://localhost:5173;
 backend must be on :8000). `npm run build` must pass after every frontend change.
+
+> **⚠️ RESPONSIVE-FIRST RULE (applies to ALL UI generation/edits):** Before writing or changing
+> ANY UI, make it correctly responsive for BOTH phone and laptop views (at minimum, generally
+> responsive with no overlap/overflow at any width). Never let elements overlap or stack on top of
+> each other on small screens (e.g. a score number and an action icon sharing one grid cell).
+> Verify the layout works at mobile width, not only desktop. This is not optional — treat a broken
+> mobile layout as a bug in the change itself.
+
 Behavior notes:
-- Gating order (App.jsx): health → auth (`useMe`) → onboarding (no persona `Name:` line ⇒ `<Onboarding>`) → model-config gate (`me.has_key` false ⇒ standalone `<BrainStep>`) → app. After onboarding OR the brain-gate completes, the app lands on the **Words** view (add practice words first).
+- Gating order (App.jsx): health → auth (`useMe`) → onboarding (no persona `Name:` line ⇒ `<Onboarding>`) → model-config gate (`me.has_key` false ⇒ standalone `<BrainStep>`) → app. After onboarding OR the brain-gate completes, the app lands on the **Words** view (add practice words first). App also mounts the app-wide **Fluently voice assistant** (draggable `<AssistantFab>` + `<AssistantOverlay>`, gated on `useAssistantStatus().available`); assistant actions invalidate the affected caches so screens refresh live.
 - Onboarding is 3 steps: persona → about you → "How smart should I be?" (paste Gemini key → Verify → Swift/Sage cards appear → pick → Continue). The about-text is submitted only at the end, so its LLM structuring uses the user's own key.
 - Scoring chips persist across refresh: shown from the live POST /api/chat response, and on reload
   from each user message's `word_events` (GET .../messages). Each chip is click-to-expand for the

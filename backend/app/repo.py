@@ -320,7 +320,28 @@ def set_memory_file(file: str, content: str, user_id: str = DEFAULT_USER_ID) -> 
 
 
 # ============================================================ SETTINGS / PURGE
-def purge_conversations(user_id: str = DEFAULT_USER_ID) -> tuple[int, int]:
+def purge_conversations(
+    user_id: str = DEFAULT_USER_ID, persona_id: str | None = None
+) -> tuple[int, int]:
+    """Delete conversations + their messages for a user. When `persona_id` is given, only that
+    persona's chats are removed (words/memories are always untouched); otherwise ALL personas'
+    chats go. Word events are detached (conversation_id/message_id nulled) so score history
+    survives either way."""
+    if persona_id is not None:
+        conv_ids = [c.id for c in list_conversations(user_id, persona_id=persona_id)]
+        if not conv_ids:
+            return 0, 0
+        word_events_col().update_many(
+            {"user_id": user_id, "conversation_id": {"$in": conv_ids}},
+            {"$set": {"conversation_id": None, "message_id": None}},
+        )
+        n_msg = messages_col().delete_many(
+            {"user_id": user_id, "conversation_id": {"$in": conv_ids}}
+        ).deleted_count
+        n_conv = conversations_col().delete_many(
+            {"_id": {"$in": [_oid(cid) for cid in conv_ids]}, "user_id": user_id}
+        ).deleted_count
+        return n_conv, n_msg
     word_events_col().update_many(
         {"user_id": user_id}, {"$set": {"conversation_id": None, "message_id": None}}
     )

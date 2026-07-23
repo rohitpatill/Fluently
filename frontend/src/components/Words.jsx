@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ChevronDown, Loader2, NotebookPen, Pencil, Plus, Search, Trophy, X } from 'lucide-react';
+import { ChevronDown, Loader2, NotebookPen, Pencil, Plus, Search, Trash2, Trophy, X } from 'lucide-react';
 
 import * as api from '../api';
 import { useDashboardStats, useWordEvents, useWords } from '../hooks/useApi';
@@ -193,8 +193,28 @@ function WordRow({ word, expanded, onToggle }) {
         <div className="col-span-2 sm:col-span-1 sm:flex-1">
           <ScoreBar score={word.score} slipping={false} />
         </div>
-        <span className="font-mono text-sm font-semibold w-9 text-right row-start-1 col-start-2 sm:row-auto sm:col-auto">{Math.round(word.score)}</span>
-        <motion.span animate={{ rotate: expanded ? 180 : 0 }} className="hidden sm:block text-[#B4B8C4]"><ChevronDown size={15} /></motion.span>
+        <div className="row-start-1 col-start-2 sm:row-auto sm:col-auto justify-self-end flex items-center gap-2.5 sm:gap-4 shrink-0">
+          <span className="font-mono text-sm font-semibold w-9 text-right">{Math.round(word.score)}</span>
+          {confirmRemove ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); remove.mutate(); }}
+              disabled={remove.isPending}
+              title="Confirm remove"
+              className="text-[11px] font-semibold text-red bg-transparent border border-red/40 rounded-full px-2.5 py-1 cursor-pointer hover:bg-red/5 disabled:opacity-50 transition-colors shrink-0"
+            >
+              {remove.isPending ? '…' : 'sure?'}
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirmRemove(true); setTimeout(() => setConfirmRemove(false), 2500); }}
+              title="Remove word"
+              className="text-[#B4B8C4] hover:text-red bg-transparent border-none cursor-pointer p-1 -m-1 transition-colors shrink-0"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
+          <motion.span animate={{ rotate: expanded ? 180 : 0 }} className="hidden sm:block text-[#B4B8C4]"><ChevronDown size={15} /></motion.span>
+        </div>
       </div>
       <AnimatePresence>
         {expanded && (

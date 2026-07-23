@@ -175,8 +175,12 @@ export const setModelTier = (tier) =>
   request('/api/model/tier', { method: 'PUT', body: JSON.stringify({ tier }) });
 
 // ---------- Settings / data management (HARD deletes) ----------
-export const purgeConversations = () =>
-  request('/api/settings/conversations', { method: 'DELETE' });
+// personaId omitted → delete every persona's chats; given → only that persona's.
+export const purgeConversations = (personaId) =>
+  request(
+    `/api/settings/conversations${personaId ? `?persona_id=${encodeURIComponent(personaId)}` : ''}`,
+    { method: 'DELETE' },
+  );
 
 export const purgeMemories = () => request('/api/settings/memories', { method: 'DELETE' });
 

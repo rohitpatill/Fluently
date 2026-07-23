@@ -6,22 +6,27 @@ import { AlertTriangle, Loader2, LogOut, MessagesSquare, NotebookPen, ShieldAler
 
 import * as api from '../api';
 import { useDevMode } from '../hooks/useDevMode';
-import { useModelTiers } from '../hooks/useApi';
+import { useModelTiers, usePersonas } from '../hooks/useApi';
 import { TierCard, Spinner } from './Shared';
 import PersonasSettings from './Personas';
 
 /* Danger levels: soft (accent-outline confirm) vs hard (type-to-confirm). */
 
-function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger, confirmWord, onConfirm, busy }) {
-  const [open, setOpen] = useState(false);
+function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger, confirmWord, onConfirm, busy, secondaryLabel, onSecondary }) {
+  // `open` holds which action is being confirmed: 'primary' | 'secondary' | null.
+  // A second (optional) action reuses the exact same confirm flow (e.g. delete THIS persona's
+  // chats vs. ALL personas' chats).
+  const [open, setOpen] = useState(null);
   const [typed, setTyped] = useState('');
   const needsTyping = !!confirmWord;
   const armed = !needsTyping || typed.trim().toLowerCase() === confirmWord;
+  const activeLabel = open === 'secondary' ? secondaryLabel : buttonLabel;
 
   async function run() {
-    setOpen(false);
+    const which = open;
+    setOpen(null);
     setTyped('');
-    await onConfirm();
+    await (which === 'secondary' ? onSecondary : onConfirm)();
   }
 
   return (
@@ -36,17 +41,28 @@ function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger
           {keeps && <p className="mt-1.5 mb-0 text-[12px] text-[#1E7D4B]">Keeps: {keeps}</p>}
         </div>
         {!open && (
-          <button
-            onClick={() => setOpen(true)}
-            disabled={busy}
-            className={`shrink-0 self-start sm:self-auto rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border ${
-              danger
-                ? 'bg-transparent text-red border-[#F2CBC7] hover:bg-[#FCEFEE]'
-                : 'bg-transparent text-accent border-accent-soft-border hover:bg-accent-soft'
-            } disabled:opacity-50`}
-          >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : buttonLabel}
-          </button>
+          <div className="flex flex-col gap-2 shrink-0 self-stretch sm:self-auto w-full sm:w-auto">
+            <button
+              onClick={() => setOpen('primary')}
+              disabled={busy}
+              className={`rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border ${
+                danger
+                  ? 'bg-transparent text-red border-[#F2CBC7] hover:bg-[#FCEFEE]'
+                  : 'bg-transparent text-accent border-accent-soft-border hover:bg-accent-soft'
+              } disabled:opacity-50`}
+            >
+              {busy ? <Loader2 size={14} className="animate-spin mx-auto" /> : buttonLabel}
+            </button>
+            {secondaryLabel && (
+              <button
+                onClick={() => setOpen('secondary')}
+                disabled={busy}
+                className="rounded-xl px-4 py-2 text-[13px] font-semibold cursor-pointer transition-colors border bg-transparent text-red border-[#F2CBC7] hover:bg-[#FCEFEE] disabled:opacity-50"
+              >
+                {secondaryLabel}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -81,10 +97,10 @@ function DangerCard({ icon: Icon, title, description, keeps, buttonLabel, danger
                     danger ? 'bg-red hover:bg-[#A8443E]' : 'bg-accent hover:bg-accent-hover'
                   } disabled:opacity-40 disabled:cursor-not-allowed`}
                 >
-                  Yes, {buttonLabel.toLowerCase()}
+                  Yes, {activeLabel.toLowerCase()}
                 </button>
                 <button
-                  onClick={() => { setOpen(false); setTyped(''); }}
+                  onClick={() => { setOpen(null); setTyped(''); }}
                   className="rounded-[10px] px-4 py-2 text-[13px] font-semibold bg-transparent text-muted border border-border-2 cursor-pointer hover:bg-[#F1F2F6] transition-colors"
                 >
                   Cancel
@@ -282,6 +298,11 @@ export default function SettingsView({ personaName, me }) {
   const [busy, setBusy] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [devMode, setDevMode] = useDevMode();
+  const personas = usePersonas();
+  const personaList = personas.data || [];
+  const activePersona = personaList.find((p) => p.is_active);
+  const activePersonaName = activePersona?.name || personaName;
+  const multiPersona = personaList.length > 1;
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -347,18 +368,29 @@ export default function SettingsView({ personaName, me }) {
           <div className="flex flex-col gap-3.5">
             <DangerCard
               icon={MessagesSquare}
-              title="Delete all conversations"
-              description={`Every chat with ${personaName} is permanently deleted.`}
-              keeps="your words & scores, all memories, the persona"
-              buttonLabel="Delete conversations"
+              title="Delete conversations"
+              description={
+                multiPersona
+                  ? `Clear your chat history — either just your chats with ${activePersonaName}, or every conversation across all your personas.`
+                  : `Every chat with ${activePersonaName} is permanently deleted.`
+              }
+              keeps="your words & scores, all memories, your personas"
+              buttonLabel={multiPersona ? `Delete chats with ${activePersonaName}` : 'Delete conversations'}
               busy={busy}
-              onConfirm={() => exec(api.purgeConversations, 'All conversations deleted')}
+              onConfirm={() =>
+                exec(
+                  () => api.purgeConversations(multiPersona ? activePersona?.id : undefined),
+                  multiPersona ? `Chats with ${activePersonaName} deleted` : 'All conversations deleted',
+                )
+              }
+              secondaryLabel={multiPersona ? 'Delete ALL conversations (every persona)' : undefined}
+              onSecondary={multiPersona ? () => exec(api.purgeConversations, 'All conversations deleted') : undefined}
             />
             <DangerCard
               icon={NotebookPen}
               title="Delete memories"
-              description={`Everything ${personaName} has learned about you and your life is erased — identity and life notebooks reset to blank.`}
-              keeps="conversations, words & scores, the persona"
+              description="Everything Fluently has learned about you and your life is erased — your identity and life notebooks reset to blank. This is shared across all your personas."
+              keeps="conversations, words & scores, your personas"
               buttonLabel="Delete memories"
               busy={busy}
               onConfirm={() => exec(api.purgeMemories, 'Memories erased')}

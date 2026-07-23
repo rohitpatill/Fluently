@@ -16,9 +16,12 @@ class PurgeAllRequest(BaseModel):
 
 
 @router.delete("/conversations")
-def purge_conversations(user_id: str = Depends(get_current_user)):
-    """Delete ALL conversations and messages. Words, scores and memories are untouched."""
-    n_conv, n_msg = repo.purge_conversations(user_id)
+def purge_conversations(
+    persona_id: str | None = None, user_id: str = Depends(get_current_user)
+):
+    """Delete conversations and messages. With `?persona_id=` only that persona's chats are
+    deleted; without it, ALL personas' chats go. Words, scores and memories are always untouched."""
+    n_conv, n_msg = repo.purge_conversations(user_id, persona_id=persona_id)
     return {"deleted_conversations": n_conv, "deleted_messages": n_msg}
 
 

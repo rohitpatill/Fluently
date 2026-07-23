@@ -28,6 +28,46 @@ def test_purge_conversations_keeps_words_and_memories(client):
     assert len(events) == 1 and events[0]["conversation_id"] is None
 
 
+def test_purge_conversations_scoped_to_one_persona(client):
+    """?persona_id= deletes only that persona's chats; other personas' chats survive."""
+    # The default persona ("Jack") already exists; make its chat.
+    jack = next(p for p in client.get("/api/personas").json() if p["is_active"])
+    jack_cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
+    client.post(f"/api/chat/{jack_cid}", json={"content": "Hi Jack"})
+
+    # A second persona with its own chat.
+    maya_id = client.post("/api/personas", json={"name": "Maya", "relation": "mentor"}).json()["id"]
+    client.post(f"/api/personas/{maya_id}/activate")
+    maya_cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
+    client.post(f"/api/chat/{maya_cid}", json={"content": "Hi Maya"})
+
+    # Delete ONLY Jack's conversations.
+    r = client.delete(f"/api/settings/conversations?persona_id={jack['id']}")
+    assert r.status_code == 200
+    assert r.json()["deleted_conversations"] == 1
+
+    remaining = client.get("/api/conversations").json()
+    # Listing is scoped to the active persona (Maya) — hers must survive.
+    assert [c["id"] for c in remaining] == [maya_cid]
+    # Jack's chat is gone.
+    assert client.get(f"/api/conversations/{jack_cid}").status_code == 404
+
+
+def test_purge_conversations_all_personas(client):
+    """No persona_id → every persona's chats are removed."""
+    jack_cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
+    client.post(f"/api/chat/{jack_cid}", json={"content": "Hi Jack"})
+    maya_id = client.post("/api/personas", json={"name": "Maya", "relation": "mentor"}).json()["id"]
+    client.post(f"/api/personas/{maya_id}/activate")
+    maya_cid = client.post("/api/conversations", json={"suggest_topics": False}).json()["conversation"]["id"]
+    client.post(f"/api/chat/{maya_cid}", json={"content": "Hi Maya"})
+
+    r = client.delete("/api/settings/conversations")
+    assert r.status_code == 200
+    assert r.json()["deleted_conversations"] == 2
+    assert client.get("/api/conversations").json() == []
+
+
 def test_purge_memories_keeps_persona_words_conversations(client):
     wid, cid = _seed(client)
     r = client.delete("/api/settings/memories")
