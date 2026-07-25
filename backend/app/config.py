@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # browser (Google forbids OAuth in embedded WebViews) and returns here via a custom URL
     # scheme that Android hands to the app. Must match the scheme declared in the app's
     # AndroidManifest.xml intent-filter. Config-driven so the app id can change without code.
-    native_app_redirect: str = "com.fluently.app://auth"
+    native_app_redirect: str = "com.rohitpatil.fluently://auth"
 
     @property
     def cors_origins_list(self) -> list[str]:

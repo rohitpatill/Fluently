@@ -31,6 +31,13 @@ frontend/android/app/src/main/assets/capacitor.config.json
 frontend/android/app/src/main/assets/capacitor.plugins.json
 frontend/*.keystore
 frontend/*.jks
+frontend/android/*.keystore
+frontend/android/*.jks
+# Release signing credentials (passwords + keystore path). NEVER commit — losing or leaking the
+# keystore means the app can never be updated again. See android/keystore.properties.example.
+frontend/android/keystore.properties
+# Generated Play Store listing images (regenerable from public/logo.png)
+frontend/store-assets/
 
 # --- keep-alive pingers (deployed separately, not part of main app) ---
 keep-alive/

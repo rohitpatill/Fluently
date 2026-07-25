@@ -1,10 +1,24 @@
 apply plugin: 'com.android.application'
 
+// --- Release signing -----------------------------------------------------------------------
+// Play Store uploads must be signed with YOUR OWN keystore (the debug key is rejected).
+// Credentials are read from keystore.properties, which is GITIGNORED and never committed —
+// see frontend/android/frontendAndroidContext.md §8 for how to create it.
+//
+// If the file is absent (fresh clone, CI without secrets, or debug-only work) the release
+// signingConfig is simply skipped, so `assembleDebug` keeps working with no setup at all.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+def hasKeystore = keystorePropsFile.exists()
+if (hasKeystore) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
-    namespace = "com.fluently.app"
+    namespace = "com.rohitpatil.fluently"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.fluently.app"
+        applicationId "com.rohitpatil.fluently"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -16,10 +30,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasKeystore) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

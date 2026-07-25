@@ -208,13 +208,13 @@ naturally into conversations, judges how well the user produces them, and tracks
     Android app for the Play Store. **There is NO second frontend:** [Capacitor](https://capacitorjs.com/)
     wraps the SAME React `dist/` build in a native WebView, so the website and the app run identical
     code and UI is written **once**. The website is completely unaffected. Lives in `frontend/android/`
-    (a committed Gradle project) + `frontend/capacitor.config.json` (`appId: com.fluently.app`).
+    (a committed Gradle project) + `frontend/capacitor.config.json` (`appId: com.rohitpatil.fluently`).
     Three things genuinely differ in the app, all isolated behind `frontend/src/platform.js` +
     `frontend/src/authToken.js` (both no-ops on web):
     (a) **AUTH** — Google forbids OAuth inside embedded WebViews, and the app's WebView (origin
     `https://localhost`) can't read the system browser's cookie jar. So native login opens the
     SYSTEM browser, the backend returns the session JWT through a **deep link**
-    (`com.fluently.app://auth?token=…`, `config.native_app_redirect`), and the app then sends it as
+    (`com.rohitpatil.fluently://auth?token=…`, `config.native_app_redirect`), and the app then sends it as
     `Authorization: Bearer` on HTTP and as **`?token=`** on WebSockets (sockets can't carry headers).
     `deps.py` accepts either transport, so **the website's cookie flow is unchanged**.
     (b) **BUILD-TIME BACKEND URL** — `VITE_API_URL` is baked into the bundle, so a shared/release
@@ -241,7 +241,7 @@ ENG/
 │   │                    react-markdown, Fontsource variable fonts. No router (state-based views).
 │   │                    + Capacitor 8 (core/cli/android + app/browser/preferences plugins).
 │   ├── vite.config.js   react + @tailwindcss/vite plugins, port 5173
-│   ├── capacitor.config.json  appId com.fluently.app, appName Fluently, webDir dist
+│   ├── capacitor.config.json  appId com.rohitpatil.fluently, appName Fluently, webDir dist
 │   ├── android/         ← NATIVE ANDROID APP (Capacitor Gradle project, committed as source:
 │   │                      hand-edited manifest [OAuth deep link + RECORD_AUDIO], debug-only
 │   │                      cleartext config, generated icons/splash).
@@ -336,7 +336,7 @@ ENG/
 
 ## API surface
 
-- **Auth:** `GET /api/auth/google/login` (→ Google consent; **`?native=1`** = login from the Android app, flag stored inside the SIGNED state), `GET /api/auth/google/callback` (verify → **web:** session cookie + redirect to frontend / **native:** redirect to `com.fluently.app://auth?token=<JWT>`, no cookie; failure → `?auth_error=1` on the matching target), `GET /api/auth/me` (profile + `has_persona` + `has_key`/`tier`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires a session (401 without it) and is scoped to that user — authenticated by **either** the session cookie (website) **or** `Authorization: Bearer <JWT>` (native app); WebSockets take **`?token=`** since they can't send headers.
+- **Auth:** `GET /api/auth/google/login` (→ Google consent; **`?native=1`** = login from the Android app, flag stored inside the SIGNED state), `GET /api/auth/google/callback` (verify → **web:** session cookie + redirect to frontend / **native:** redirect to `com.rohitpatil.fluently://auth?token=<JWT>`, no cookie; failure → `?auth_error=1` on the matching target), `GET /api/auth/me` (profile + `has_persona` + `has_key`/`tier`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires a session (401 without it) and is scoped to that user — authenticated by **either** the session cookie (website) **or** `Authorization: Bearer <JWT>` (native app); WebSockets take **`?token=`** since they can't send headers.
 - **Model (BYO key):** `GET /api/model/tiers` (Swift/Sage catalogue), `GET /api/model/status` (`{has_key, tier}`, never the key), `POST /api/model/key` (`{api_key, tier}` → verify → encrypt → store; 400 on bad key), `PUT /api/model/tier` (`{tier}` switch). LLM-using routes (`POST /api/chat/...`, `POST /api/conversations`, `.../opener`) return **403** if the user has no key/tier yet.
 - **Personas (multi-persona):** `GET /api/personas` (list, each with `is_active`/`conversation_count`), `POST /api/personas` (create), `PUT /api/personas/{id}` (edit), `PUT /api/personas/{id}/avatar` (public URL), `POST /api/personas/{id}/activate` (switch), `DELETE /api/personas/{id}` (delete + cascade its chats; keeps ≥1). Discover: `GET /api/personas/catalog` + `POST /api/personas/catalog/{catalog_id}/use` (copy a curated figure into the user's personas).
 - **Voice (real-time audio, Gemini Live):** `WS /api/voice/ws/{conversation_id}` (duplex audio; cookie-auth on handshake; server-side tools + per-turn message persistence), `GET /api/voice/voices` (voice catalogue + `audition_url`), `GET /api/voice/status` (`{available}` = user has a key/tier).
@@ -401,7 +401,7 @@ per-user model) → 7. judge user message (same per-user model) → scoring even
   name) + `MONGODB_DB`, plus the Google-OAuth block (`GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`,
   `OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, `CORS_ALLOWED_ORIGINS`, `SESSION_SECRET`,
   `STATE_COOKIE_SECRET`, `SESSION_MAX_AGE_DAYS`, `NATIVE_APP_REDIRECT` [the Android deep link;
-  code default `com.fluently.app://auth` is already correct]). **`CORS_ALLOWED_ORIGINS` must include
+  code default `com.rohitpatil.fluently://auth` is already correct]). **`CORS_ALLOWED_ORIGINS` must include
   `https://localhost`** (the Android WebView's origin) or every request from the app is blocked.
   Provider keys (`OPENAI/ANTHROPIC/GOOGLE_API_KEY`) +
   DEFAULT/JUDGE/UTILITY model settings are LEGACY/unused (users bring their own key). The FRONTEND

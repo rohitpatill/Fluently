@@ -25,7 +25,7 @@ NO router — state-based view switching · NO hand-written CSS files beyond ind
 | `public/` | favicon.svg, **logo.png** (app-icon source, see the Android context) (+ leftover icons.svg from scaffold). |
 | `.env` (+ `.env.example`) | Vite build-time config: `VITE_API_URL` (backend base), `VITE_MAX_MESSAGE_CHARS` (text-message char cap, default 1200). No secrets. **NOTE:** `VITE_API_URL` is baked in at build time for the app too — a shared/release APK MUST be built with the production URL (see the Android context §5). |
 | `android/` | **The native Android app** (Capacitor Gradle project) — committed as source because it carries the hand-edited manifest (OAuth deep link + mic permissions), the debug-only cleartext config, and the generated icons/splash. See [android/frontendAndroidContext.md](android/frontendAndroidContext.md). |
-| `capacitor.config.json` | Capacitor config: `appId: com.fluently.app`, `appName: Fluently`, `webDir: dist`. |
+| `capacitor.config.json` | Capacitor config: `appId: com.rohitpatil.fluently`, `appName: Fluently`, `webDir: dist`. |
 | `assets/` | Generated icon/splash SOURCE images (from `public/logo.png`) used to regenerate the Android launcher icons + splash screens. |
 | `CAPACITOR.md` | Interim quick-start for the app. The authoritative doc is `android/frontendAndroidContext.md`. |
 

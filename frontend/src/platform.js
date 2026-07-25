@@ -46,7 +46,7 @@ export function initNativeApp() {
  * Register the OAuth deep-link listener — the "return leg" of native login.
  *
  * Native login runs in the system browser; when it finishes, the backend redirects to
- * `com.fluently.app://auth?token=…` (or `?auth_error=1`). Android hands that URL to this app,
+ * `com.rohitpatil.fluently://auth?token=…` (or `?auth_error=1`). Android hands that URL to this app,
  * `@capacitor/app` fires `appUrlOpen`, and we store the token + close the browser tab.
  *
  * `onAuthenticated` is called after a token is stored so the caller can refresh auth state.

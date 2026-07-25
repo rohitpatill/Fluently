@@ -54,7 +54,7 @@ Toolchain floors baked into the project: AGP 8.13.0 · Gradle 8.14.3 · minSdk 2
 
 | Path | What it is |
 |---|---|
-| `app/src/main/AndroidManifest.xml` | **Hand-edited, do not regenerate blindly.** Holds the launcher intent-filter, the **OAuth deep-link intent-filter** (`com.fluently.app://auth`), and `RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS` for voice. |
+| `app/src/main/AndroidManifest.xml` | **Hand-edited, do not regenerate blindly.** Holds the launcher intent-filter, the **OAuth deep-link intent-filter** (`com.rohitpatil.fluently://auth`), and `RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS` for voice. |
 | `app/src/debug/AndroidManifest.xml` | **Debug-only** overlay: points at the network-security config below. Merged into debug builds ONLY, so release stays HTTPS-strict. |
 | `app/src/debug/res/xml/network_security_config.xml` | **Debug-only**: permits cleartext HTTP to **loopback only** (`localhost`, `127.0.0.1`, `10.0.2.2`) so on-device testing can reach a dev backend via `adb reverse`. Every other host still requires HTTPS. |
 | `app/src/main/res/mipmap-*/` | Launcher icons (all densities, `ic_launcher`, `_round`, adaptive `_foreground`/`_background`). Generated — see §7. |
@@ -68,7 +68,7 @@ Toolchain floors baked into the project: AGP 8.13.0 · Gradle 8.14.3 · minSdk 2
 `android/` **is committed to Git** — it carries the hand-edited manifest, the debug network config,
 and the generated icons. Re-running `npx cap add android` would silently discard all of that.
 
-Config lives one level up: **`frontend/capacitor.config.json`** — `appId: com.fluently.app`,
+Config lives one level up: **`frontend/capacitor.config.json`** — `appId: com.rohitpatil.fluently`,
 `appName: Fluently`, `webDir: dist`.
 
 ---
@@ -111,8 +111,8 @@ Install / launch / inspect:
 ```bash
 adb devices                                  # phone must read "device", not "unauthorized"
 adb install -r <path-to>/app-debug.apk       # -r keeps app data (session token survives)
-adb shell am force-stop com.fluently.app
-adb shell monkey -p com.fluently.app -c android.intent.category.LAUNCHER 1
+adb shell am force-stop com.rohitpatil.fluently
+adb shell monkey -p com.rohitpatil.fluently -c android.intent.category.LAUNCHER 1
 ```
 
 **Debugging the WebView:** desktop Chrome → **`chrome://inspect`** → *inspect* under Fluently.
@@ -180,7 +180,7 @@ app: "Continue with Google"
        └─ backend signs state as "state:nonce:native"  ← flag is inside the SIGNED cookie,
           so it survives the trip to Google and cannot be tampered with
             └─ Google consent → /api/auth/google/callback
-                 └─ native? → 302 to  com.fluently.app://auth?token=<session JWT>
+                 └─ native? → 302 to  com.rohitpatil.fluently://auth?token=<session JWT>
                                       (no cookie set — the app could never read it)
                       └─ Android routes that URL to MainActivity (deep-link intent-filter)
                            └─ @capacitor/app `appUrlOpen` → store token, close browser tab
@@ -209,7 +209,7 @@ would harden this later.
 
 **Token lifetime = `SESSION_MAX_AGE_DAYS`** (default 7). It is minted+signed with the backend's
 `SESSION_SECRET`, so a token from your **local** backend is invalid against **production** and
-vice-versa — after switching environments, clear app data (`adb shell pm clear com.fluently.app`)
+vice-versa — after switching environments, clear app data (`adb shell pm clear com.rohitpatil.fluently`)
 or just log in again.
 
 **Requirements outside the code:** production `CORS_ALLOWED_ORIGINS` must include
@@ -245,7 +245,7 @@ npm run build && npx cap sync android
 ```
 
 **After running it, re-verify the manifest** — the tool **reformats `AndroidManifest.xml`** and you
-must confirm these survived: `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, the `com.fluently.app`
+must confirm these survived: `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, the `com.rohitpatil.fluently`
 deep-link filter, `BROWSABLE`, `INTERNET`.
 
 Check the *generated* result, not just the source: open
@@ -294,10 +294,10 @@ uploaded to Play, and users update through the store.
 | `adb devices` → **`unauthorized`** | The "Allow USB debugging?" prompt wasn't accepted. Accept it (tick *always allow*); replug the cable if it doesn't appear. Recurs after revoking authorization. |
 | `adb devices` → empty | USB is in "charging only" — switch the phone's USB mode to **File Transfer / MTP**. |
 | App shows **"Can't reach your companion"** | Almost always **CORS**: the backend's `CORS_ALLOWED_ORIGINS` is missing `https://localhost` (the WebView's origin). Diagnose with `curl -i <backend>/api/health -H "Origin: https://localhost"` and look for `access-control-allow-origin`. Its absence is the bug. |
-| Login opens the browser, succeeds, **never returns to the app** | The backend is missing the native flow, or the deep link isn't registered. Check the state cookie from `/api/auth/google/login?native=1` — the signed payload must end in **`:native`**. If it doesn't, prod is running old code. Verify registration: `adb shell pm dump com.fluently.app \| grep -i "com.fluently.app://"`. |
+| Login opens the browser, succeeds, **never returns to the app** | The backend is missing the native flow, or the deep link isn't registered. Check the state cookie from `/api/auth/google/login?native=1` — the signed payload must end in **`:native`**. If it doesn't, prod is running old code. Verify registration: `adb shell pm dump com.rohitpatil.fluently \| grep -i "com.rohitpatil.fluently://"`. |
 | Logged in, but UI still shows the login screen | React Query cached the pre-login **401** and `['me']` uses `retry:false`; an *invalidate* doesn't refetch an errored query. `main.jsx` uses **`resetQueries()`** after the deep link for exactly this reason. |
 | Voice/mic says **"not authenticated"** while text chat works fine | The WebSocket isn't carrying the token. Sockets can't send headers — `api.js` must append `?token=`, and the backend must read it (`deps.user_id_from_websocket`). |
-| Mic silently fails | `RECORD_AUDIO` missing from the manifest, or permission denied. Check: `adb shell dumpsys package com.fluently.app \| grep RECORD_AUDIO` → expect `granted=true`. |
+| Mic silently fails | `RECORD_AUDIO` missing from the manifest, or permission denied. Check: `adb shell dumpsys package com.rohitpatil.fluently \| grep RECORD_AUDIO` → expect `granted=true`. |
 | Blank/white screen | `webDir` mismatch, or the web app wasn't built before syncing. Run `npm run build` **then** `npx cap sync android`. |
 | Old icon still showing | Launcher icon cache. Clear the launcher or reboot (see §7). |
 | Release build can't reach the backend | `VITE_API_URL` still `localhost`, and/or a leftover `server.url` block in `capacitor.config.json` (a dev-only live-reload setting that **must not** ship). |

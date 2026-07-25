@@ -21,7 +21,7 @@
 
             <!-- OAuth return leg: Google login runs in the system browser (Google forbids
                  embedded WebViews), and the backend finishes by redirecting to
-                 com.fluently.app://auth?token=… . This filter makes Android hand that URL to
+                 com.rohitpatil.fluently://auth?token=… . This filter makes Android hand that URL to
                  this activity, where @capacitor/app's appUrlOpen picks it up
                  (see src/platform.js initAuthDeepLink). Keep the scheme in sync with the
                  backend's NATIVE_APP_REDIRECT / config.native_app_redirect. -->
@@ -29,7 +29,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="com.fluently.app" android:host="auth" />
+                <data android:scheme="com.rohitpatil.fluently" android:host="auth" />
             </intent-filter>
         </activity>
 

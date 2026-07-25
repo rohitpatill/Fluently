@@ -20,7 +20,7 @@ just takes the same `dist/` build and wraps it in a native app shell.
 | Added / changed | What it is |
 |---|---|
 | `@capacitor/core`, `@capacitor/cli`, `@capacitor/android`, `@capacitor/app`, `@capacitor/browser`, `@capacitor/preferences` (in `package.json`) | Capacitor runtime + CLI + Android platform + plugins for the (upcoming) OAuth deep-link + token storage. |
-| `capacitor.config.json` | Capacitor config: app id `com.fluently.app`, name `Fluently`, `webDir: dist`. |
+| `capacitor.config.json` | Capacitor config: app id `com.rohitpatil.fluently`, name `Fluently`, `webDir: dist`. |
 | `android/` | The generated native Android project (Gradle). Open this in Android Studio. |
 | `src/platform.js` | Small abstraction: "are we native or web?" + one-time native init. **No-op on the website.** |
 | `src/main.jsx` | Calls `initNativeApp()` at startup (no-op on web). |
@@ -131,7 +131,7 @@ edits hot-reload on the phone.
 2. Add a `server` block to `capacitor.config.json` pointing at your PC:
    ```json
    {
-     "appId": "com.fluently.app",
+     "appId": "com.rohitpatil.fluently",
      "appName": "Fluently",
      "webDir": "dist",
      "server": {
@@ -178,7 +178,7 @@ cannot read the system browser's cookie jar. So the native flow is:
 
 1. App opens `\<backend\>/api/auth/google/login?native=1` in the **system browser** (`@capacitor/browser`).
 2. Backend runs the normal OAuth flow; the `native` flag rides inside the **signed** state cookie.
-3. The callback redirects to **`com.fluently.app://auth?token=<session JWT>`**.
+3. The callback redirects to **`com.rohitpatil.fluently://auth?token=<session JWT>`**.
 4. Android hands that URL to the app; `@capacitor/app`'s `appUrlOpen` listener
    (`src/platform.js`) stores the token via `@capacitor/preferences` (`src/authToken.js`).
 5. Every HTTP request then sends `Authorization: Bearer <jwt>`; **WebSockets** (voice) pass it as

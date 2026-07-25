@@ -1,4 +1,4 @@
-package com.fluently.app;
+package com.rohitpatil.fluently;
 
 import com.getcapacitor.BridgeActivity;
 
