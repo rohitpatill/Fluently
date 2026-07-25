@@ -23,7 +23,11 @@ changing native auth.** Everything needed to rebuild this from a fresh machine i
 | Website | **Completely unaffected** by any of this |
 | iOS | Not started (`npx cap add ios`, needs a Mac) |
 | OTA / live updates | **Deliberately NOT used** (paid). Every change ⇒ new bundle ⇒ Play Store. |
-| Signed release AAB / Play Store listing | **Not done yet** — no keystore exists |
+| Release signing | **Done** — keystore exists (gitignored), Gradle reads it from `keystore.properties` |
+| Signed release AAB | **Built and uploaded to Play** (`versionCode 2`) |
+| Play Store | Submitted for **closed testing** review. Package `com.rohitpatil.fluently`. |
+
+**To ship a new version, follow [RELEASE.md](RELEASE.md)** — the step-by-step release runbook.
 
 ---
 
@@ -255,33 +259,65 @@ Samsung) or reboot. A full uninstall also works but **wipes the stored session t
 
 ---
 
-## 8. Sharing the APK / releasing to Play Store
+## 8. Signing, sharing, and releasing
 
-**Sharing with people now:** send `app/build/outputs/apk/debug/app-debug.apk` (~4.9 MB). The
-recipient must allow "install from unknown sources". It talks to production, so it just works.
-This is a **debug** build — fine for testers, not acceptable for the Play Store.
+**Release signing is already set up.** `app/build.gradle` reads credentials from
+`android/keystore.properties` (**gitignored**), and skips the release `signingConfig` entirely when
+that file is absent — so `assembleDebug` still works on a fresh clone with zero setup. The format is
+documented in `keystore.properties.example`.
 
-**Play Store requires a signed release AAB** — not built yet. Outstanding work:
+### Secret files — NOT in Git, so NOT backed up by GitHub
 
-1. **Create a keystore.** ⚠️ **Irreversible:** every future update must be signed with the *same*
-   key. Lose it and the app can **never** be updated — you'd need a new listing and would lose all
-   users and reviews. Back it up (password manager / secure cloud) and **never commit it**
-   (`*.jks`/`*.keystore` are gitignored).
-2. Add a `signingConfig` + release block to `app/build.gradle`, keeping credentials **out of Git**
-   (use `local.properties`, gitignored, or environment variables).
-3. Set `VITE_API_URL` to production, rebuild, then `./gradlew bundleRelease`.
-4. **Bump `versionCode`** for *every* Play upload (must strictly increase); `versionName` is the
-   human-facing string.
-5. Play Console: $25 one-time account, store listing, screenshots, a **privacy policy URL**
-   (mandatory — the app handles Google account data, chat content and microphone audio, and sends
-   text/audio to Google Gemini), and the data-safety form.
-6. ⏳ **New personal developer accounts must run a closed test with ≥12 testers for 14 days**
-   before production access, plus ~7 days review. **Budget ~3 weeks of calendar time** independent
-   of code readiness.
+| File | Contains | If lost |
+|---|---|---|
+| `android/fluently-release.jks` | The upload signing key (alias `fluently`, PKCS12, valid to 2053) | **IRRECOVERABLE.** The app can never be updated again — new listing, new package name, all users/installs/reviews lost. |
+| `android/keystore.properties` | The keystore + key passwords | Same as above (the .jks is useless without them). |
+| `backend/.env` | `ENCRYPTION_KEY`, `MONGODB_URI`, Google OAuth secret, session secrets | Every user's stored Gemini key becomes permanently undecryptable. **Never rotate `ENCRYPTION_KEY`.** Values are also in the Render dashboard. |
+| `frontend/.env` | `VITE_API_URL` only | Trivial — recreate from `.env.example`. |
+
+Both signing files must be backed up **off this machine** (password manager + one offline copy).
+
+### Two artifacts, two purposes
+
+| Build | Command | Output | Use |
+|---|---|---|---|
+| **AAB** (Play Store) | `gradlew bundleRelease` | `app/build/outputs/bundle/release/app-release.aab` (~5.8 MB) | The ONLY format Play accepts. Google generates per-device APKs from it. |
+| **Signed release APK** | `gradlew assembleRelease` | `app/build/outputs/apk/release/app-release.apk` (~6.0 MB) | Sharing directly (WhatsApp/Drive). Recipient must allow "unknown sources". |
+| Debug APK | `gradlew assembleDebug` | `app/build/outputs/apk/debug/app-debug.apk` | Local development only — marked debuggable, includes the loopback cleartext exemption. |
+
+> ⚠️ A sideloaded release APK and the Play build share a package name but have **different signing
+> chains** (Play re-signs with its own key under Play App Signing). Android will refuse to update one
+> over the other — the user must uninstall first. Give official testers the **Play link**, not the APK.
+
+### Play Store facts for this app
+
+- **Package `com.rohitpatil.fluently`** — permanent. (`com.fluently.app` was already taken.)
+- **Play App Signing is ON:** your keystore is the *upload* key; Google holds the final app-signing
+  key. You still need your keystore for every upload.
+- **`versionCode` must strictly increase on every upload**, and is global across all tracks — an
+  internal-testing upload consumes that number for closed/production too. (`1` = internal, `2` =
+  closed testing.) To put the *same build* on another track, use Play's **Promote** action instead of
+  rebuilding.
+- **Advertising ID: declared "No"** — verified: the merged manifest contains only `INTERNET`,
+  `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `DUMP`. No `AD_ID`, no ad/analytics SDKs.
+- Store listing pages live in `frontend/public/`: `privacy.html`, `terms.html`,
+  `delete-account.html` (Google requires a hosted privacy-policy URL and an account-deletion URL).
+- Store graphics are regenerated into `frontend/store-assets/` (gitignored) from
+  `frontend/public/logo.png` — icon must be **exactly 512×512 and opaque**, feature graphic 1024×500.
+- ⏳ New personal developer accounts must run a **closed test with ≥12 continuously opted-in testers
+  for 14 days** before production access, plus review time. Budget ~3 weeks of calendar time.
+  Recruit 14–15 testers: the count is *currently* opted-in, so an uninstall stalls the clock.
+- Testers need their **own free Gemini API key** (aistudio.google.com) or they can't finish
+  onboarding — the biggest drop-off risk during a closed test.
 
 **No OTA.** Live-updates (e.g. `@capgo/capacitor-updater`) were evaluated and **deliberately
 skipped** (paid). Consequence: **every** change — even a one-line CSS tweak — needs a new bundle
-uploaded to Play, and users update through the store.
+uploaded to Play, and users update through the store. See [RELEASE.md](RELEASE.md).
+
+### App optimization "Low" in Play Console — expected, ignore
+Play suggests R8 shrinking (`minifyEnabled false` here). This app is ~99% web assets in a WebView
+with a single Java class, so the gain is negligible — and minification can break the Capacitor
+JS↔native bridge. Deliberately left off.
 
 ---
 

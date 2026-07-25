@@ -21,7 +21,10 @@ android {
         applicationId "com.rohitpatil.fluently"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        // versionCode MUST strictly increase on every Play Store upload (Play rejects a reused
+        // value, even across different tracks). versionName is the human-facing string and can
+        // stay the same across builds.
+        versionCode 2
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

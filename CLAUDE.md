@@ -24,7 +24,8 @@ CLAUDE.md                                  ← top: whole-project truth (this fi
 │   ├── src/frontendSrcContext.md
 │   │   └── components/frontendSrcComponentsContext.md
 │   └── android/frontendAndroidContext.md  ← NATIVE ANDROID APP (Capacitor): requirements,
-│                                            build/run/release, native auth, icons, troubleshooting
+│       │                                    build/run, native auth, icons, troubleshooting
+│       └── android/RELEASE.md             ← runbook: ship a new Play Store version
 └── backend/backendContext.md              ← detailed scope context
     ├── app/backendAppContext.md
     │   ├── routers/backendAppRoutersContext.md
@@ -222,12 +223,17 @@ naturally into conversations, judges how well the user produces them, and tracks
     `adb reverse tcp:8000 tcp:8000` (Google rejects raw private IPs as OAuth redirect URIs).
     (c) **EDGE-TO-EDGE** — a safe-area CSS rule scoped to `html.capacitor-native`.
     Prod also needs `https://localhost` in `CORS_ALLOWED_ORIGINS`. **No OTA/live-updates** (paid,
-    deliberately skipped) ⇒ EVERY change needs a new bundle uploaded to Play. Not yet done: signed
-    release AAB + keystore + store listing.
+    deliberately skipped) ⇒ EVERY change needs a new bundle uploaded to Play.
+    **Status:** release signing is set up (keystore + `keystore.properties`, both GITIGNORED and
+    therefore NOT backed up by GitHub — losing them means the app can never be updated), a signed
+    AAB is uploaded, and the app is in Play **closed testing** review. Store-listing pages live in
+    `frontend/public/` (`privacy.html`, `terms.html`, `delete-account.html`).
     ⚠️ **Before ANY app/bundle/native-auth work, read `frontend/android/frontendAndroidContext.md`** —
-    it holds the machine requirements (Android Studio Otter+, **SDK Platform 36**, bundled JDK 21),
-    the exact build/run/test commands, the local `adb reverse` setup, icon regeneration (incl. the
-    double-padding trap), the release/Play checklist, and a troubleshooting table of real failures.
+    machine requirements (Android Studio Otter+, **SDK Platform 36**, bundled JDK 21), build/run/test
+    commands, the local `adb reverse` setup, icon regeneration (incl. the double-padding trap), the
+    secret-file inventory, and a troubleshooting table of real failures.
+    ⚠️ **To ship a new version, follow `frontend/android/RELEASE.md`** (bump `versionCode` — it must
+    strictly increase and is global across all Play tracks — build, verify, upload, device-test).
 
 ## Repository layout
 
