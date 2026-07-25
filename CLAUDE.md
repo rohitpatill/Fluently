@@ -21,8 +21,10 @@ whole codebase.
 ```
 CLAUDE.md                                  ← top: whole-project truth (this file, most detail-dense)
 ├── frontend/frontendContext.md            ← detailed scope context
-│   └── src/frontendSrcContext.md
-│       └── components/frontendSrcComponentsContext.md
+│   ├── src/frontendSrcContext.md
+│   │   └── components/frontendSrcComponentsContext.md
+│   └── android/frontendAndroidContext.md  ← NATIVE ANDROID APP (Capacitor): requirements,
+│                                            build/run/release, native auth, icons, troubleshooting
 └── backend/backendContext.md              ← detailed scope context
     ├── app/backendAppContext.md
     │   ├── routers/backendAppRoutersContext.md
@@ -202,6 +204,31 @@ naturally into conversations, judges how well the user produces them, and tracks
     to an edge, default LEFT, position in localStorage). On a successful action App invalidates the
     affected caches so the relevant screen updates live (no manual refresh).
 
+13. **Native ANDROID APP via Capacitor (BUILT, working on-device)** — Fluently also ships as a real
+    Android app for the Play Store. **There is NO second frontend:** [Capacitor](https://capacitorjs.com/)
+    wraps the SAME React `dist/` build in a native WebView, so the website and the app run identical
+    code and UI is written **once**. The website is completely unaffected. Lives in `frontend/android/`
+    (a committed Gradle project) + `frontend/capacitor.config.json` (`appId: com.fluently.app`).
+    Three things genuinely differ in the app, all isolated behind `frontend/src/platform.js` +
+    `frontend/src/authToken.js` (both no-ops on web):
+    (a) **AUTH** — Google forbids OAuth inside embedded WebViews, and the app's WebView (origin
+    `https://localhost`) can't read the system browser's cookie jar. So native login opens the
+    SYSTEM browser, the backend returns the session JWT through a **deep link**
+    (`com.fluently.app://auth?token=…`, `config.native_app_redirect`), and the app then sends it as
+    `Authorization: Bearer` on HTTP and as **`?token=`** on WebSockets (sockets can't carry headers).
+    `deps.py` accepts either transport, so **the website's cookie flow is unchanged**.
+    (b) **BUILD-TIME BACKEND URL** — `VITE_API_URL` is baked into the bundle, so a shared/release
+    APK must be built against the PUBLIC backend; local on-device testing uses
+    `adb reverse tcp:8000 tcp:8000` (Google rejects raw private IPs as OAuth redirect URIs).
+    (c) **EDGE-TO-EDGE** — a safe-area CSS rule scoped to `html.capacitor-native`.
+    Prod also needs `https://localhost` in `CORS_ALLOWED_ORIGINS`. **No OTA/live-updates** (paid,
+    deliberately skipped) ⇒ EVERY change needs a new bundle uploaded to Play. Not yet done: signed
+    release AAB + keystore + store listing.
+    ⚠️ **Before ANY app/bundle/native-auth work, read `frontend/android/frontendAndroidContext.md`** —
+    it holds the machine requirements (Android Studio Otter+, **SDK Platform 36**, bundled JDK 21),
+    the exact build/run/test commands, the local `adb reverse` setup, icon regeneration (incl. the
+    double-padding trap), the release/Play checklist, and a troubleshooting table of real failures.
+
 ## Repository layout
 
 ```
@@ -209,15 +236,27 @@ ENG/
 ├── CLAUDE.md            ← this file (KEEP UPDATED)
 ├── .claude/agents/researcher.md   ← deep-research subagent (sonnet + web tools)
 ├── .claude/agents/tester.md       ← test-runner subagent (sonnet; reads this file, runs suite, reports)
-├── frontend/            ← React app (BUILT — see "Frontend" below)
+├── frontend/            ← React app — serves BOTH the website and the Android app (BUILT)
 │   ├── package.json     Vite + React 19, Tailwind v4, motion, TanStack Query, lucide, sonner,
 │   │                    react-markdown, Fontsource variable fonts. No router (state-based views).
+│   │                    + Capacitor 8 (core/cli/android + app/browser/preferences plugins).
 │   ├── vite.config.js   react + @tailwindcss/vite plugins, port 5173
+│   ├── capacitor.config.json  appId com.fluently.app, appName Fluently, webDir dist
+│   ├── android/         ← NATIVE ANDROID APP (Capacitor Gradle project, committed as source:
+│   │                      hand-edited manifest [OAuth deep link + RECORD_AUDIO], debug-only
+│   │                      cleartext config, generated icons/splash).
+│   │                      **frontendAndroidContext.md = the authoritative app doc.**
+│   ├── assets/          ← icon/splash SOURCE images generated from public/logo.png
+│   ├── CAPACITOR.md     ← interim app quick-start (authoritative doc is android/…Context.md)
 │   ├── Fluent App.dc.html / Fluent.dc.html / support.js  ← original design prototypes (reference only)
 │   └── src/
 │       ├── main.jsx         React root: QueryClientProvider + sonner Toaster + font imports
 │       ├── index.css        Tailwind v4 @theme design tokens (colors/fonts/radii/shadows/keyframes)
 │       ├── api.js           fetch wrapper (credentials:'include' for the session cookie), one function per backend endpoint (base localhost:8000); auth: getMe/logout/loginWithGoogle; model: getModelTiers/getModelStatus/setModelKey/setModelTier; voice: getVoices/getVoiceStatus/voiceSocketUrl (ws:// from base); assistant: getAssistantStatus/assistantSocketUrl(tab)
+│       ├── platform.js      THE web-vs-native seam (Capacitor): isNativeApp(), native init
+│       │                    (safe-area class), OAuth deep-link listener. No-op on the website.
+│       ├── authToken.js     native session-token store (@capacitor/preferences) — the app cannot
+│       │                    use the HttpOnly cookie; always null / no-op on the website
 │       ├── utils.js         time formatting, persona/identity name parsing from raw markdown
 │       ├── hooks/useApi.js  TanStack Query hooks (health poll, me/auth [+has_key/tier], conversations, messages, words, stats, memory, model tiers, voice status/voices)
 │       ├── hooks/useVoiceSession.js  voice client: mic AudioWorklet (16k Int16 PCM) + WS + 24k playback (barge-in) + transcript/score/status state; start/stop
@@ -297,7 +336,7 @@ ENG/
 
 ## API surface
 
-- **Auth:** `GET /api/auth/google/login` (→ Google consent), `GET /api/auth/google/callback` (verify → session cookie → redirect to frontend; failure → `frontend_url/?auth_error=1`), `GET /api/auth/me` (profile + `has_persona` + `has_key`/`tier`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires the session cookie (401 without it) and is scoped to that user.
+- **Auth:** `GET /api/auth/google/login` (→ Google consent; **`?native=1`** = login from the Android app, flag stored inside the SIGNED state), `GET /api/auth/google/callback` (verify → **web:** session cookie + redirect to frontend / **native:** redirect to `com.fluently.app://auth?token=<JWT>`, no cookie; failure → `?auth_error=1` on the matching target), `GET /api/auth/me` (profile + `has_persona` + `has_key`/`tier`; 401 if unauthenticated), `POST /api/auth/logout`. Every OTHER endpoint below requires a session (401 without it) and is scoped to that user — authenticated by **either** the session cookie (website) **or** `Authorization: Bearer <JWT>` (native app); WebSockets take **`?token=`** since they can't send headers.
 - **Model (BYO key):** `GET /api/model/tiers` (Swift/Sage catalogue), `GET /api/model/status` (`{has_key, tier}`, never the key), `POST /api/model/key` (`{api_key, tier}` → verify → encrypt → store; 400 on bad key), `PUT /api/model/tier` (`{tier}` switch). LLM-using routes (`POST /api/chat/...`, `POST /api/conversations`, `.../opener`) return **403** if the user has no key/tier yet.
 - **Personas (multi-persona):** `GET /api/personas` (list, each with `is_active`/`conversation_count`), `POST /api/personas` (create), `PUT /api/personas/{id}` (edit), `PUT /api/personas/{id}/avatar` (public URL), `POST /api/personas/{id}/activate` (switch), `DELETE /api/personas/{id}` (delete + cascade its chats; keeps ≥1). Discover: `GET /api/personas/catalog` + `POST /api/personas/catalog/{catalog_id}/use` (copy a curated figure into the user's personas).
 - **Voice (real-time audio, Gemini Live):** `WS /api/voice/ws/{conversation_id}` (duplex audio; cookie-auth on handshake; server-side tools + per-turn message persistence), `GET /api/voice/voices` (voice catalogue + `audition_url`), `GET /api/voice/status` (`{available}` = user has a key/tier).
@@ -343,9 +382,12 @@ per-user model) → 7. judge user message (same per-user model) → scoring even
   **persona** is a doc in the `personas` collection (its own markdown + avatar); users in the
   `users` collection (carry `active_persona_id`); conversations carry a `persona_id`. `data/` is
   now just a legacy backup; the app never reads it.
-- Auth: Google OAuth only, server-side code flow, stateless JWT session cookie. Routers resolve
+- Auth: Google OAuth only, server-side code flow, stateless JWT session. Routers resolve
   the user via `Depends(get_current_user)` (`app/deps.py`) — NEVER hardcode a user id. Store NO
-  Google tokens. Any new persisted auth state (e.g. a future `token_version` for revocation) goes
+  Google tokens. The SAME signed JWT travels two ways: the **session cookie** (website) or
+  **`Authorization: Bearer`** / **`?token=`** on WebSockets (native Android app, which cannot use
+  the cookie — see concept 13). `app/deps.py` is the ONLY place that reads either transport; add
+  new auth transports there, never per-router. Any new persisted auth state (e.g. a future `token_version` for revocation) goes
   through `repo.py`. Verify against `docs/oauth-handoff.md` for the locked decisions.
 - Gemini must use explicit provider string `google_genai` (bare `gemini-*` infers Vertex).
 - **Bring-your-own-key:** each user's Gemini key + tier live on their `User` doc; the key is
@@ -358,7 +400,10 @@ per-user model) → 7. judge user message (same per-user model) → scoring even
 - Env keys: `ENCRYPTION_KEY` (Fernet, REQUIRED) + `MONGODB_URI` (SRV string incl. `/fluently` db
   name) + `MONGODB_DB`, plus the Google-OAuth block (`GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`,
   `OAUTH_REDIRECT_BASE`, `FRONTEND_URL`, `CORS_ALLOWED_ORIGINS`, `SESSION_SECRET`,
-  `STATE_COOKIE_SECRET`, `SESSION_MAX_AGE_DAYS`). Provider keys (`OPENAI/ANTHROPIC/GOOGLE_API_KEY`) +
+  `STATE_COOKIE_SECRET`, `SESSION_MAX_AGE_DAYS`, `NATIVE_APP_REDIRECT` [the Android deep link;
+  code default `com.fluently.app://auth` is already correct]). **`CORS_ALLOWED_ORIGINS` must include
+  `https://localhost`** (the Android WebView's origin) or every request from the app is blocked.
+  Provider keys (`OPENAI/ANTHROPIC/GOOGLE_API_KEY`) +
   DEFAULT/JUDGE/UTILITY model settings are LEGACY/unused (users bring their own key). The FRONTEND
   reads its backend base URL from `VITE_API_URL` (Vite env, baked at build) — NEVER hardcoded. Real
   secrets ONLY in `.env`; `.env.example` carries placeholders (incl. no real `ENCRYPTION_KEY`). For

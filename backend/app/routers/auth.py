@@ -3,11 +3,21 @@
 Flow:
   GET  /api/auth/google/login     → redirect to Google's consent screen (sets a signed
                                      state/nonce cookie for CSRF + replay protection).
+                                     `?native=1` marks a login started by the Android app.
   GET  /api/auth/google/callback  → verify state, exchange code, verify ID token, upsert the
-                                     user (first user adopts legacy "default" data), mint a
-                                     session cookie, and bounce back to the frontend.
+                                     user (first user adopts legacy "default" data), then
+                                     finish per client:
+                                       web    → set the session cookie, redirect to frontend_url
+                                       native → redirect to settings.native_app_redirect with
+                                                ?token=<session JWT> (no cookie)
   GET  /api/auth/me               → the current user's profile (+ whether onboarding is done).
   POST /api/auth/logout           → clear the session cookie.
+
+WHY the native branch exists: Google refuses OAuth inside embedded WebViews, so the Android app
+opens this flow in the SYSTEM BROWSER — whose cookie jar the app's WebView (origin
+`https://localhost`) cannot read. The session JWT is therefore handed back through a custom-scheme
+deep link and sent afterwards as `Authorization: Bearer` (see `deps._session_token`). The `native`
+flag rides inside the SIGNED state cookie so it survives the round-trip to Google untampered.
 """
 
 import secrets
