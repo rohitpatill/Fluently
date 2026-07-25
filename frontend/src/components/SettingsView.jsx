@@ -409,11 +409,11 @@ export default function SettingsView({ personaName, me }) {
             />
             <DangerCard
               icon={ShieldAlert}
-              title="Delete my account and everything in it"
-              description={`The full wipe: conversations, memories, ${personaName}, your words, scores, history, your saved model key — and your account itself, including your name and email. Nothing about you is kept. You'll be signed out immediately; signing in again starts a brand-new account.`}
-              buttonLabel="Delete my account"
+              title="Delete everything"
+              description={`The full wipe: conversations, memories, ${personaName}, your words, scores, history, your saved model key — plus your account itself, including your name and email. Every trace, hard-deleted. You'll be signed out immediately; signing in again starts over as a brand-new account.`}
+              buttonLabel="Delete everything"
               danger
-              confirmWord="delete my account"
+              confirmWord="delete everything"
               busy={busy}
               onConfirm={() =>
                 // delete_account:true ⇒ the user row goes too, which kills this session. Send the
