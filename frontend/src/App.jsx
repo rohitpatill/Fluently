@@ -83,7 +83,7 @@ export default function App() {
     return (
       <FullScreenError
         title="Can't reach your companion"
-        message="The backend at localhost:8000 isn't responding. Start it, then try again."
+        message={`The backend at ${import.meta.env.VITE_API_URL || '(VITE_API_URL not set)'} isn't responding. Check it's running and reachable, then try again.`}
         onRetry={() => {
           health.refetch();
           me.refetch();

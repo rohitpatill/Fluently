@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG-ONLY manifest overlay. Gradle merges this into debug builds only, so the RELEASE
+  build (and therefore anything on the Play Store) is completely unaffected and stays
+  HTTPS-only.
+
+  Why it exists: for local development the app talks to the backend on this dev machine over
+  plain HTTP (http://localhost:8000, reached from the phone via `adb reverse tcp:8000 tcp:8000`).
+  Android blocks cleartext HTTP by default, so debug builds opt in via the network-security
+  config in src/debug/res/xml/network_security_config.xml, which permits cleartext to
+  localhost/loopback ONLY.
+
+  Production builds point VITE_API_URL at https://api.fluently.fun and need none of this.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:networkSecurityConfig="@xml/network_security_config"
+        tools:replace="android:networkSecurityConfig" />
+</manifest>

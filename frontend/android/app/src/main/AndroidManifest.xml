@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- OAuth return leg: Google login runs in the system browser (Google forbids
+                 embedded WebViews), and the backend finishes by redirecting to
+                 com.fluently.app://auth?token=… . This filter makes Android hand that URL to
+                 this activity, where @capacitor/app's appUrlOpen picks it up
+                 (see src/platform.js initAuthDeepLink). Keep the scheme in sync with the
+                 backend's NATIVE_APP_REDIRECT / config.native_app_redirect. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.fluently.app" android:host="auth" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Voice mode: persona voice chat + the in-app Fluently voice assistant capture
+         microphone audio (getUserMedia / AudioWorklet) inside the WebView. Android requires
+         these to be declared here, and RECORD_AUDIO is a runtime permission the WebView will
+         prompt for on first use. Without these, mic capture silently fails in the app. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+</manifest>

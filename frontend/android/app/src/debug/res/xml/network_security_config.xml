@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG-ONLY network security config (see ../../AndroidManifest.xml).
+
+  Permits cleartext HTTP to loopback addresses ONLY, so the app can reach the backend running
+  on the developer's machine via `adb reverse tcp:8000 tcp:8000`. Every other host still
+  requires HTTPS, even in debug. Release builds never include this file.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

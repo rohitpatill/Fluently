@@ -11,10 +11,26 @@ backend/tests/last_report.txt
 # --- frontend (Node) ---
 frontend/.env
 frontend/.env.*
+# ...but DO track the placeholder template, so a fresh clone knows what to configure.
+!frontend/.env.example
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 frontend/*.local
+
+# --- Capacitor / Android native app (frontend/android is committed as source,
+#     but Gradle build outputs, local machine config, and signing secrets are not) ---
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/capacitor-cordova-android-plugins/build/
+frontend/android/local.properties
+frontend/android/.idea/
+frontend/android/app/src/main/assets/public/
+frontend/android/app/src/main/assets/capacitor.config.json
+frontend/android/app/src/main/assets/capacitor.plugins.json
+frontend/*.keystore
+frontend/*.jks
 
 # --- keep-alive pingers (deployed separately, not part of main app) ---
 keep-alive/

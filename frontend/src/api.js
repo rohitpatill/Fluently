@@ -1,3 +1,6 @@
+import { getToken } from './authToken';
+import { isNativeApp } from './platform';
+
 // The one backend base URL, read from the frontend .env (VITE_API_URL).
 // Every endpoint below is built from this. Change it in .env to deploy.
 const BASE_URL = import.meta.env.VITE_API_URL;
@@ -11,10 +14,18 @@ class ApiError extends Error {
 
 async function request(path, options = {}) {
   let res;
+  // Native app: the session travels as a bearer token (its WebView can't use the cookie —
+  // see authToken.js). On the web `getToken()` is always null, so nothing changes there and
+  // the HttpOnly cookie keeps authenticating exactly as before.
+  const token = getToken();
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       credentials: 'include', // send/receive the session cookie cross-origin
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
       ...options,
     });
   } catch (err) {
@@ -35,14 +46,49 @@ async function request(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+/**
+ * Add the session token to a WebSocket URL when running in the native app.
+ *
+ * The browser WebSocket API cannot send custom headers, so the bearer-token trick used for
+ * HTTP requests is impossible on a socket. The backend's WS auth therefore also accepts
+ * `?token=` (see backend `deps.user_id_from_websocket`). On the WEBSITE `getToken()` is null,
+ * so the URL is returned untouched and the session cookie authenticates as before.
+ */
+function withSocketAuth(url) {
+  const token = getToken();
+  if (!token) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+}
+
 // ---------- Auth ----------
 export const getMe = () => request('/api/auth/me');
 
-export const logout = () => request('/api/auth/logout', { method: 'POST' });
+export const logout = async () => {
+  const res = await request('/api/auth/logout', { method: 'POST' });
+  // Native app: also drop the stored bearer token, or we'd stay "logged in" locally.
+  const { clearToken } = await import('./authToken');
+  await clearToken();
+  return res;
+};
 
-// Full-page redirect into the backend's Google login (which redirects on to Google).
-export const loginWithGoogle = () => {
-  window.location.href = `${BASE_URL}/api/auth/google/login`;
+/**
+ * Start the Google login.
+ *
+ * WEB: a full-page redirect, exactly as before — the backend sets an HttpOnly session cookie
+ * and bounces back to the SPA.
+ *
+ * NATIVE: opens the flow in the SYSTEM BROWSER (Chrome Custom Tab) because Google refuses
+ * OAuth inside embedded WebViews. `?native=1` tells the backend to finish by redirecting to
+ * our custom-scheme deep link with the session token, which `platform.js`'s listener catches.
+ */
+export const loginWithGoogle = async () => {
+  const url = `${BASE_URL}/api/auth/google/login`;
+  if (!isNativeApp()) {
+    window.location.href = url;
+    return;
+  }
+  const { Browser } = await import('@capacitor/browser');
+  await Browser.open({ url: `${url}?native=1` });
 };
 
 // ---------- Conversations ----------
@@ -148,7 +194,7 @@ export const getVoiceStatus = () => request('/api/voice/status');
 // The WebSocket URL for a conversation's voice session (derives ws:// from the http base).
 export const voiceSocketUrl = (conversationId) => {
   const wsBase = BASE_URL.replace(/^http/, 'ws');
-  return `${wsBase}/api/voice/ws/${conversationId}`;
+  return withSocketAuth(`${wsBase}/api/voice/ws/${conversationId}`);
 };
 
 // ---------- Fluently voice assistant (in-app help + hands-free actions) ----------
@@ -158,7 +204,7 @@ export const getAssistantStatus = () => request('/api/assistant/status');
 // user is currently on so it can ground its help. No conversation id — the session is ephemeral.
 export const assistantSocketUrl = (tab) => {
   const wsBase = BASE_URL.replace(/^http/, 'ws');
-  return `${wsBase}/api/assistant/ws?tab=${encodeURIComponent(tab || 'chat')}`;
+  return withSocketAuth(`${wsBase}/api/assistant/ws?tab=${encodeURIComponent(tab || 'chat')}`);
 };
 
 // ---------- Model (bring-your-own-key + Swift/Sage tiers) ----------
