@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Delete your Fluently account</title>
+<style>
+  :root { --ink:#1A1D27; --ink2:#2A2E3A; --muted:#6B7080; --accent:#4B5DE4; --line:#E7E9EF; --bg:#F7F8FA; --red:#C0564F; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+         line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 20px 80px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px 28px; }
+  h1 { font-size:29px; line-height:1.2; margin:0 0 6px; letter-spacing:-.02em; }
+  h2 { font-size:18px; margin:30px 0 10px; letter-spacing:-.01em; }
+  p, li { color:var(--ink2); font-size:15.5px; }
+  ol, ul { padding-left:22px; }
+  li { margin:8px 0; }
+  a { color:var(--accent); }
+  .meta { color:var(--muted); font-size:14px; margin:0 0 4px; }
+  .brand { display:flex; align-items:center; gap:9px; margin-bottom:26px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--accent); }
+  .brand span { font-weight:700; letter-spacing:-.01em; }
+  .steps { background:#EEF0FE; border:1px solid #D9DDFB; border-radius:12px; padding:16px 18px; margin:16px 0; }
+  .steps ol { margin:0; }
+  .warn { background:#FFF9F0; border:1px solid #F4E3C2; border-radius:12px; padding:14px 16px; margin:18px 0; }
+  .warn p { margin:0; font-size:14.5px; }
+  kbd { background:#F1F2F6; border:1px solid var(--line); border-radius:6px; padding:1px 6px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13.5px; }
+  footer { margin-top:28px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:14px; }
+  @media (max-width:560px) { .card { padding:24px 18px; } h1 { font-size:24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="dot"></div><span>Fluently</span></div>
+
+  <div class="card">
+    <h1>Delete your Fluently account</h1>
+    <p class="meta">Applies to the Fluently app and website (fluently.fun) &middot; Last updated 25 July 2026</p>
+
+    <p>You can delete your Fluently account and all of your data yourself, at any time, directly in
+    the app. You do not need to contact us.</p>
+
+    <h2>How to delete your account (in the app)</h2>
+    <div class="steps">
+      <ol>
+        <li>Open <strong>Fluently</strong> and sign in.</li>
+        <li>Go to <strong>Settings</strong> (the gear icon in the navigation).</li>
+        <li>Scroll to the <strong>Data management</strong> section.</li>
+        <li>Tap <strong>Delete my account</strong>.</li>
+        <li>Type <kbd>delete my account</kbd> to confirm.</li>
+      </ol>
+    </div>
+    <p>You are signed out immediately. Signing in with Google again creates a completely new,
+    empty account that starts from onboarding.</p>
+
+    <h2>What is deleted</h2>
+    <p><strong>Everything.</strong> The deletion is immediate and permanent — there is no
+    soft-delete, no grace period and no archived copy:</p>
+    <ul>
+      <li>Your account record — your <strong>name, email address, Google account identifier and
+      profile picture</strong></li>
+      <li>Your stored <strong>AI provider API key</strong> and model preference</li>
+      <li>All <strong>conversations and messages</strong> (text and voice transcripts)</li>
+      <li>All <strong>companion personas</strong> you created or added</li>
+      <li>All <strong>memory notes</strong> Fluently kept about you</li>
+      <li>All <strong>vocabulary</strong>, proficiency scores and score history</li>
+    </ul>
+    <p>No data is retained after deletion, and none of it can be recovered — by you or by us.
+    Our database and hosting providers keep their own automated infrastructure backups and
+    short-lived server logs as a standard platform function; those are outside our direct control
+    and are overwritten on the providers&rsquo; own schedules.</p>
+
+    <div class="warn">
+      <p><strong>This cannot be undone.</strong> If you only want to clear part of your data, the
+      same <strong>Data management</strong> section also lets you delete just your conversations,
+      just your memory notes, or reset everything while keeping your vocabulary.</p>
+    </div>
+
+    <h2>Prefer us to do it?</h2>
+    <p>If you can&rsquo;t access the app, email
+    <a href="mailto:hello@fluently.fun">hello@fluently.fun</a> from the address on your account and
+    ask us to delete it. We will confirm and delete your account and all associated data, normally
+    within 30 days.</p>
+
+    <h2>Note on your AI provider key</h2>
+    <p>Deleting your account removes the copy of your Gemini API key stored with us. It does
+    <strong>not</strong> revoke the key at Google — if you no longer want it to exist, delete it in
+    your own Google AI Studio / Google Cloud console.</p>
+
+    <footer>
+      See also our <a href="/privacy.html">Privacy Policy</a> and
+      <a href="/terms.html">Terms of Service</a>.
+    </footer>
+  </div>
+</div>
+</body>
+</html>
