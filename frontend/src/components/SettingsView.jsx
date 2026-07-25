@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { AlertTriangle, Loader2, LogOut, MessagesSquare, NotebookPen, ShieldAlert, Trash2, Users, Wrench } from 'lucide-react';
 
 import * as api from '../api';
+import { clearToken } from '../authToken';
 import { useDevMode } from '../hooks/useDevMode';
 import { useModelTiers, usePersonas } from '../hooks/useApi';
 import { TierCard, Spinner } from './Shared';
@@ -408,13 +409,21 @@ export default function SettingsView({ personaName, me }) {
             />
             <DangerCard
               icon={ShieldAlert}
-              title="Delete everything"
-              description={`The full wipe: conversations, memories, ${personaName}, your words, scores, history — plus your saved model key & tier. Every trace, hard-deleted. The app restarts as if installed today — you'll pick your brain again from scratch.`}
-              buttonLabel="Delete everything"
+              title="Delete my account and everything in it"
+              description={`The full wipe: conversations, memories, ${personaName}, your words, scores, history, your saved model key — and your account itself, including your name and email. Nothing about you is kept. You'll be signed out immediately; signing in again starts a brand-new account.`}
+              buttonLabel="Delete my account"
               danger
-              confirmWord="delete everything"
+              confirmWord="delete my account"
               busy={busy}
-              onConfirm={() => exec(() => api.purgeAll(false), 'Everything deleted — starting fresh')}
+              onConfirm={() =>
+                // delete_account:true ⇒ the user row goes too, which kills this session. Send the
+                // user to a clean login state instead of leaving a dead session in the UI.
+                exec(async () => {
+                  await api.purgeAll(false, true);
+                  await clearToken(); // native app: drop the now-invalid bearer token
+                  window.location.href = '/';
+                }, 'Your account and all your data have been deleted')
+              }
             />
           </div>
         </div>

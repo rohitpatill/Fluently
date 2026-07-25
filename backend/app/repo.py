@@ -350,6 +350,12 @@ def purge_conversations(
     return n_conv, n_msg
 
 
+def purge_memory_files(user_id: str = DEFAULT_USER_ID) -> int:
+    """Delete the user's memory-file documents outright (rather than resetting them to a header).
+    Used by full ACCOUNT deletion, where no row should survive."""
+    return memory_files_col().delete_many({"user_id": user_id}).deleted_count
+
+
 def purge_words(user_id: str = DEFAULT_USER_ID) -> int:
     word_events_col().delete_many({"user_id": user_id})
     return words_col().delete_many({"user_id": user_id}).deleted_count
@@ -497,6 +503,23 @@ def purge_personas(user_id: str = DEFAULT_USER_ID) -> int:
 
 def set_active_persona(user_id: str, persona_id: str | None) -> None:
     users_col().update_one({"_id": _oid(user_id)}, {"$set": {"active_persona_id": persona_id}})
+
+
+def delete_user(user_id: str) -> bool:
+    """Delete the USER ACCOUNT record itself (email, name, google_sub, picture, stored key).
+
+    This is the last step of a full account deletion: the caller must already have purged the
+    user's content (conversations/messages/words/events/memory files/personas). Once this row is
+    gone nothing identifying the person remains, and signing in with Google again creates a
+    brand-new account that starts at onboarding.
+
+    Google Play requires an account-deletion route for any app with account creation, and our
+    privacy policy promises we keep nothing — this is what makes that literally true."""
+    try:
+        users_col().delete_one({"_id": _oid(user_id)})
+    except ValueError:
+        return False
+    return True
 
 
 def reassign_default_data(new_user_id: str) -> dict:

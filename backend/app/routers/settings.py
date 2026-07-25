@@ -13,6 +13,11 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 class PurgeAllRequest(BaseModel):
     keep_words: bool = False
+    # True ⇒ ALSO delete the account record itself (email, name, Google id, picture), i.e. a
+    # true ACCOUNT deletion rather than just a data reset. Only meaningful with keep_words=False
+    # (you cannot keep practice words if the account they belong to is gone). Defaults to False
+    # so the existing "reset everything" behavior is unchanged.
+    delete_account: bool = False
 
 
 @router.delete("/conversations")
@@ -57,6 +62,19 @@ def purge_all(payload: PurgeAllRequest, user_id: str = Depends(get_current_user)
     # (already purged above).
     for f in ("identity", "memory"):
         memory_service.reset_file(f, user_id)
+
+    # ACCOUNT deletion: with keep_words=False + delete_account=True this becomes a true account
+    # deletion — after purging all content we drop the user record itself, so nothing identifying
+    # the person is left (no email, name, Google id, picture or stored API key). Signing in with
+    # Google afterwards creates a brand-new account starting at onboarding. Required by Google
+    # Play for apps with account creation, and it's what makes the privacy policy's
+    # "we keep nothing" literally true.
+    deleted_account = False
+    if payload.delete_account and not payload.keep_words:
+        # The memory files were reset above; remove the documents outright so no row remains.
+        repo.purge_memory_files(user_id)
+        deleted_account = repo.delete_user(user_id)
+
     return {
         "deleted_conversations": n_conv,
         "deleted_messages": n_msg,
@@ -64,4 +82,5 @@ def purge_all(payload: PurgeAllRequest, user_id: str = Depends(get_current_user)
         "kept_words": payload.keep_words,
         "cleared_model": cleared_model,
         "reset_files": ["identity", "memory", "persona"],
+        "deleted_account": deleted_account,
     }

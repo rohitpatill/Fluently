@@ -127,3 +127,55 @@ def test_purges_are_idempotent(client):
     assert client.delete("/api/settings/conversations").status_code == 200
     assert client.delete("/api/settings/memories").status_code == 200
     assert client.post("/api/settings/purge-all", json={"keep_words": False}).status_code == 200
+
+
+def test_purge_all_delete_account_removes_the_user_record(client):
+    """delete_account=True is a TRUE account deletion: after the content purge the user row
+    itself is gone (email/name/google_sub/picture/stored key), so nothing identifying the
+    person remains. Required by Google Play's account-deletion policy."""
+    from app import repo
+    from tests.conftest import TEST_USER_ID
+
+    assert repo.get_user(TEST_USER_ID) is not None
+
+    r = client.post(
+        "/api/settings/purge-all", json={"keep_words": False, "delete_account": True}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["deleted_account"] is True
+    assert body["cleared_model"] is True
+
+    # The account record is gone...
+    assert repo.get_user(TEST_USER_ID) is None
+    # ...and so are the memory-file documents (not merely reset to a header).
+    assert repo.get_memory_file("identity", TEST_USER_ID) is None
+    assert repo.get_memory_file("memory", TEST_USER_ID) is None
+    assert repo.list_personas(TEST_USER_ID) == []
+    assert repo.list_words(TEST_USER_ID) == []
+
+
+def test_purge_all_without_flag_keeps_the_account(client):
+    """The pre-existing 'delete everything' reset must NOT remove the account (back-compat):
+    content is wiped but the user can keep using the app after re-onboarding."""
+    from app import repo
+    from tests.conftest import TEST_USER_ID
+
+    r = client.post("/api/settings/purge-all", json={"keep_words": False})
+    assert r.status_code == 200
+    assert r.json()["deleted_account"] is False
+    assert repo.get_user(TEST_USER_ID) is not None
+
+
+def test_delete_account_ignored_when_keeping_words(client):
+    """keep_words=True + delete_account=True is contradictory (words can't outlive the account),
+    so the account is deliberately preserved rather than silently deleting the words' owner."""
+    from app import repo
+    from tests.conftest import TEST_USER_ID
+
+    r = client.post(
+        "/api/settings/purge-all", json={"keep_words": True, "delete_account": True}
+    )
+    assert r.status_code == 200
+    assert r.json()["deleted_account"] is False
+    assert repo.get_user(TEST_USER_ID) is not None

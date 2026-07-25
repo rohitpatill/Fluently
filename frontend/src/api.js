@@ -230,8 +230,15 @@ export const purgeConversations = (personaId) =>
 
 export const purgeMemories = () => request('/api/settings/memories', { method: 'DELETE' });
 
-export const purgeAll = (keepWords) =>
-  request('/api/settings/purge-all', { method: 'POST', body: JSON.stringify({ keep_words: keepWords }) });
+// keepWords: keep the practice vocabulary + scores. deleteAccount: ALSO delete the account
+// record itself (email/name/Google id/picture) — a true account deletion, only valid when
+// keepWords is false. After it succeeds the session is dead, so callers must send the user
+// back to the login screen.
+export const purgeAll = (keepWords, deleteAccount = false) =>
+  request('/api/settings/purge-all', {
+    method: 'POST',
+    body: JSON.stringify({ keep_words: keepWords, delete_account: deleteAccount }),
+  });
 
 // ---------- Dashboard ----------
 export const getDashboardStats = () => request('/api/dashboard/stats');
