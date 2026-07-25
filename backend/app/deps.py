@@ -15,9 +15,29 @@ from .models import User
 from .services import auth_service
 
 
+def _session_token(request: Request) -> str | None:
+    """The caller's session JWT, from either transport.
+
+    Two transports carry the SAME signed session JWT, so everything downstream is identical:
+
+    * `Authorization: Bearer <jwt>` — used by the NATIVE app (Capacitor). The app's WebView
+      lives on its own origin (`https://localhost`) and cannot share the browser's cookie jar,
+      so it stores the JWT itself and sends it as a header.
+    * the HttpOnly session cookie — used by the WEBSITE, exactly as before.
+
+    The header is checked first (only the native app sends it); the cookie remains the
+    fallback, so web behavior is completely unchanged.
+    """
+    header = request.headers.get("Authorization") or ""
+    scheme, _, value = header.partition(" ")
+    if scheme.lower() == "bearer" and value.strip():
+        return value.strip()
+    return request.cookies.get(settings.session_cookie_name)
+
+
 def _user_from_request(request: Request) -> User:
-    """Resolve and authenticate the current user from the session cookie, or raise 401."""
-    token = request.cookies.get(settings.session_cookie_name)
+    """Resolve and authenticate the current user from the bearer token or session cookie."""
+    token = _session_token(request)
     if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     try:
@@ -39,6 +59,29 @@ def get_current_user(request: Request) -> str:
 def get_current_user_obj(request: Request) -> User:
     """FastAPI dependency yielding the full current-user profile (for `/me`)."""
     return _user_from_request(request)
+
+
+def user_id_from_websocket(ws) -> str | None:
+    """Resolve the current user's id on a WEBSOCKET handshake, or None if unauthenticated.
+
+    WebSocket routers must authenticate by hand (the HTTP `Depends` chain can't raise an
+    HTTPException on a WS handshake), so this is the shared seam they all call — keeping WS
+    auth identical to HTTP auth in one place.
+
+    Two transports, in priority order:
+      1. `?token=<jwt>` query param — used by the NATIVE app. The browser WebSocket API cannot
+         send custom headers, so a bearer header is impossible here; the token therefore rides
+         in the query string (over WSS it is encrypted in transit like any other URL).
+      2. the session cookie — used by the WEBSITE, exactly as before.
+    """
+    token = ws.query_params.get("token") or ws.cookies.get(settings.session_cookie_name)
+    if not token:
+        return None
+    try:
+        user_id = auth_service.decode_session_jwt(token)
+    except auth_service.AuthError:
+        return None
+    return user_id if repo.get_user(user_id) is not None else None
 
 
 def require_model_configured(user: User = Depends(get_current_user_obj)) -> str:

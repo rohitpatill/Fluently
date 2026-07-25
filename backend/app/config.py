@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     session_cookie_name: str = "fluently_session"
     session_max_age_days: int = 7
 
+    # --- Native app (Capacitor) deep link ---
+    # Where the OAuth callback sends the NATIVE app back to, carrying the session JWT.
+    # The app's WebView can't share the browser's cookie jar, so login happens in the system
+    # browser (Google forbids OAuth in embedded WebViews) and returns here via a custom URL
+    # scheme that Android hands to the app. Must match the scheme declared in the app's
+    # AndroidManifest.xml intent-filter. Config-driven so the app id can change without code.
+    native_app_redirect: str = "com.fluently.app://auth"
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse cors_allowed_origins into a clean list (trims spaces + trailing slashes)."""

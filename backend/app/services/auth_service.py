@@ -37,6 +37,8 @@ _VALID_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 STATE_MAX_AGE = 300
 _JWT_ALGORITHM = "HS256"
 _STATE_SEPARATOR = ":"
+# Marker appended to the signed state payload when the login came from the native app.
+_NATIVE_FLAG = "native"
 
 # One reusable transport for ID-token verification; it caches Google's public keys.
 _google_request = google_requests.Request()
@@ -53,23 +55,37 @@ def new_state_and_nonce() -> tuple[str, str]:
     return secrets.token_urlsafe(32), secrets.token_urlsafe(32)
 
 
-def sign_state(state: str, nonce: str) -> str:
-    """Sign `state:nonce` into an opaque, tamper-evident cookie value."""
+def sign_state(state: str, nonce: str, native: bool = False) -> str:
+    """Sign `state:nonce[:native]` into an opaque, tamper-evident cookie value.
+
+    `native` records whether the login was started by the NATIVE app (Capacitor). It rides
+    inside the SIGNED payload rather than a query param so it survives the round-trip through
+    Google and cannot be flipped by a caller — the callback trusts it to decide whether to
+    hand the session back via the app's deep link or the website URL.
+    """
     signer = TimestampSigner(settings.state_cookie_secret)
-    return signer.sign(f"{state}{_STATE_SEPARATOR}{nonce}".encode()).decode()
+    payload = f"{state}{_STATE_SEPARATOR}{nonce}"
+    if native:
+        payload += f"{_STATE_SEPARATOR}{_NATIVE_FLAG}"
+    return signer.sign(payload.encode()).decode()
 
 
-def unsign_state(signed: str, max_age: int = STATE_MAX_AGE) -> tuple[str, str]:
-    """Recover (state, nonce) from the signed cookie, enforcing signature + freshness."""
+def unsign_state(signed: str, max_age: int = STATE_MAX_AGE) -> tuple[str, str, bool]:
+    """Recover (state, nonce, native) from the signed cookie, enforcing signature + freshness.
+
+    The trailing native marker is optional, so a cookie signed by the older two-part format
+    (a login already in flight during a deploy) still validates and is treated as web."""
     signer = TimestampSigner(settings.state_cookie_secret)
     try:
         raw = signer.unsign(signed, max_age=max_age).decode()
     except (BadSignature, SignatureExpired) as exc:
         raise AuthError("Invalid or expired OAuth state") from exc
-    state, _, nonce = raw.partition(_STATE_SEPARATOR)
-    if not state or not nonce:
+    parts = raw.split(_STATE_SEPARATOR)
+    if len(parts) < 2 or not parts[0] or not parts[1]:
         raise AuthError("Malformed OAuth state")
-    return state, nonce
+    state, nonce = parts[0], parts[1]
+    native = len(parts) > 2 and parts[2] == _NATIVE_FLAG
+    return state, nonce, native
 
 
 # --------------------------------------------------------------------------- Google flow

@@ -49,7 +49,7 @@ def _do_login(client: TestClient, monkeypatch, claims=None) -> None:
 
     # Recover the state value the backend signed, so we can echo it back like Google would.
     signed = client.cookies.get(auth_router._STATE_COOKIE)
-    state, _nonce = auth_service.unsign_state(signed)
+    state, _nonce, _native = auth_service.unsign_state(signed)
 
     # 2. Mock the Google network hops.
     monkeypatch.setattr(auth_service, "exchange_code_for_tokens", lambda code: {"id_token": "fake"})
@@ -106,7 +106,7 @@ def test_callback_rejects_unverified_email(anon_client, monkeypatch):
     # verify_google_id_token is the real thing here would raise; simulate that by raising.
     anon_client.get("/api/auth/google/login", follow_redirects=False)
     signed = anon_client.cookies.get(auth_router._STATE_COOKIE)
-    state, _ = auth_service.unsign_state(signed)
+    state, _nonce, _native = auth_service.unsign_state(signed)
 
     def _raise(tok, nonce):
         raise auth_service.AuthError("Google account email is not verified")
@@ -186,3 +186,117 @@ def test_data_isolation_between_users(anon_client, monkeypatch):
     anon_client.cookies.clear()
     _do_login(anon_client, monkeypatch, _google_claims(sub="A", email="a@x.com"))
     assert [w["text"] for w in anon_client.get("/api/words").json()] == ["ubiquitous"]
+
+
+# ---------------------------------------------------------------- native app (Capacitor)
+# The native app can't use the session COOKIE: its WebView origin (https://localhost) has a
+# separate cookie jar from the system browser where Google login runs. So login is started
+# with ?native=1, and the callback hands the session JWT back through the app's custom-scheme
+# deep link; the app then authenticates with `Authorization: Bearer <jwt>`.
+
+
+def test_state_carries_native_flag_signed():
+    """The native marker round-trips inside the SIGNED state (can't be tampered with)."""
+    state, nonce = auth_service.new_state_and_nonce()
+
+    signed_native = auth_service.sign_state(state, nonce, native=True)
+    assert auth_service.unsign_state(signed_native) == (state, nonce, True)
+
+    signed_web = auth_service.sign_state(state, nonce)
+    assert auth_service.unsign_state(signed_web) == (state, nonce, False)
+
+
+def test_native_callback_redirects_to_deep_link_with_token(anon_client, monkeypatch):
+    """?native=1 → callback redirects to the app's deep link carrying a usable session JWT,
+    and does NOT set a session cookie (the app's WebView could never read it)."""
+    r = anon_client.get("/api/auth/google/login?native=1", follow_redirects=False)
+    assert r.status_code in (302, 307)
+
+    signed = anon_client.cookies.get(auth_router._STATE_COOKIE)
+    state, _nonce, native = auth_service.unsign_state(signed)
+    assert native is True
+
+    monkeypatch.setattr(auth_service, "exchange_code_for_tokens", lambda code: {"id_token": "fake"})
+    monkeypatch.setattr(auth_service, "verify_google_id_token", lambda tok, nonce: _google_claims())
+
+    r = anon_client.get(
+        f"/api/auth/google/callback?code=abc&state={state}", follow_redirects=False
+    )
+    assert r.status_code in (302, 307)
+    location = r.headers["location"]
+    assert location.startswith(settings.native_app_redirect)
+    assert "token=" in location
+    # No session cookie for the native flow.
+    assert settings.session_cookie_name not in r.cookies
+
+    # The handed-back token is a valid session for a real user.
+    token = location.split("token=", 1)[1]
+    from urllib.parse import unquote
+    user_id = auth_service.decode_session_jwt(unquote(token))
+    assert repo.get_user(user_id) is not None
+
+
+def test_bearer_token_authenticates_like_the_cookie(anon_client, monkeypatch):
+    """A bearer token is accepted anywhere the cookie is — same user, same data."""
+    _do_login(anon_client, monkeypatch, _google_claims(sub="native-1", email="n@x.com"))
+    me_via_cookie = anon_client.get("/api/auth/me").json()
+
+    token = auth_service.mint_session_jwt(me_via_cookie["id"])
+    anon_client.cookies.clear()  # prove the cookie is NOT what's authenticating us
+
+    r = anon_client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.json()["id"] == me_via_cookie["id"]
+
+
+def test_bad_bearer_token_is_rejected(anon_client):
+    """A tampered/garbage bearer token yields 401, never a 500."""
+    r = anon_client.get("/api/auth/me", headers={"Authorization": "Bearer not-a-real-jwt"})
+    assert r.status_code == 401
+
+
+def test_native_auth_error_redirects_to_deep_link(anon_client, monkeypatch):
+    """A failed native login bounces back into the APP (not the website) with an error flag."""
+    anon_client.get("/api/auth/google/login?native=1", follow_redirects=False)
+    signed = anon_client.cookies.get(auth_router._STATE_COOKIE)
+    state, _nonce, _native = auth_service.unsign_state(signed)
+
+    def _raise(tok, nonce):
+        raise auth_service.AuthError("Google account email is not verified")
+
+    monkeypatch.setattr(auth_service, "exchange_code_for_tokens", lambda code: {"id_token": "fake"})
+    monkeypatch.setattr(auth_service, "verify_google_id_token", _raise)
+
+    r = anon_client.get(
+        f"/api/auth/google/callback?code=abc&state={state}", follow_redirects=False
+    )
+    assert r.headers["location"].startswith(settings.native_app_redirect)
+    assert "auth_error=1" in r.headers["location"]
+
+
+def test_websocket_auth_accepts_token_query_param(monkeypatch):
+    """WS auth (voice / assistant) accepts `?token=` — the native app's only option, since a
+    WebSocket cannot send an Authorization header. Cookie remains valid for the website."""
+    from app import deps
+
+    class _FakeWS:
+        def __init__(self, query=None, cookies=None):
+            self.query_params = query or {}
+            self.cookies = cookies or {}
+
+    user, _ = repo.upsert_user_from_google(sub="ws-sub", email="ws@x.com")
+    token = auth_service.mint_session_jwt(user.id)
+
+    # 1. native transport: token in the query string
+    assert deps.user_id_from_websocket(_FakeWS(query={"token": token})) == user.id
+
+    # 2. web transport: token in the session cookie (unchanged behavior)
+    assert deps.user_id_from_websocket(
+        _FakeWS(cookies={settings.session_cookie_name: token})
+    ) == user.id
+
+    # 3. no credentials at all → None (router closes the socket)
+    assert deps.user_id_from_websocket(_FakeWS()) is None
+
+    # 4. garbage token → None, never an exception
+    assert deps.user_id_from_websocket(_FakeWS(query={"token": "nope"})) is None

@@ -32,7 +32,7 @@ import json
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from google.genai import types
 
-from .. import repo
+from .. import deps, repo
 from ..config import DEFAULT_VOICE, VOICES, settings
 from ..deps import get_current_user_obj
 from ..models import Message, User
@@ -70,15 +70,11 @@ def voice_status(user: User = Depends(get_current_user_obj)):
 # --- WebSocket auth (cannot use the HTTP Depends chain — it raises HTTPException) ----------
 
 def _authenticate(ws: WebSocket) -> str | None:
-    """Resolve the current user's id from the session cookie on the WS handshake, or None."""
-    token = ws.cookies.get(settings.session_cookie_name)
-    if not token:
-        return None
-    try:
-        user_id = auth_service.decode_session_jwt(token)
-    except auth_service.AuthError:
-        return None
-    return user_id if repo.get_user(user_id) is not None else None
+    """Resolve the current user's id on the WS handshake, or None.
+
+    Delegates to the shared seam in `deps`, which accepts the website's session cookie OR the
+    native app's `?token=` query param (a WebSocket can't carry an Authorization header)."""
+    return deps.user_id_from_websocket(ws)
 
 
 # --- Per-turn transcript buffer ------------------------------------------------------------

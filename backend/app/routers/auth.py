@@ -11,6 +11,7 @@ Flow:
 """
 
 import secrets
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
@@ -63,17 +64,29 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
-def _auth_error_redirect() -> RedirectResponse:
-    """Bounce the browser back to the SPA with a flag it can surface gently."""
+def _auth_error_redirect(native: bool = False) -> RedirectResponse:
+    """Bounce back with an error flag the client can surface gently.
+
+    Native gets the app's deep-link scheme (so the system browser hands control back to the
+    app, which shows the inline "try again"); web gets the SPA URL exactly as before.
+    """
+    if native:
+        return RedirectResponse(f"{settings.native_app_redirect}?auth_error=1")
     return RedirectResponse(f"{settings.frontend_url}/?auth_error=1")
 
 
 @router.get("/google/login")
-def google_login():
-    """Kick off the OAuth flow: set the state/nonce cookie and redirect to Google."""
+def google_login(native: int = 0):
+    """Kick off the OAuth flow: set the state/nonce cookie and redirect to Google.
+
+    `native=1` marks this as a login started by the NATIVE app (opened in the system browser).
+    The flag is carried inside the SIGNED state cookie — not a query param — so it survives the
+    round-trip to Google and cannot be tampered with, and the callback knows whether to hand
+    the session back via the app's deep link or the website.
+    """
     state, nonce = auth_service.new_state_and_nonce()
     response = RedirectResponse(auth_service.build_google_auth_url(state, nonce))
-    _set_state_cookie(response, auth_service.sign_state(state, nonce))
+    _set_state_cookie(response, auth_service.sign_state(state, nonce, native=bool(native)))
     return response
 
 
@@ -84,8 +97,10 @@ def google_callback(request: Request, code: str | None = None, state: str | None
     if not code or not state or not signed_state:
         return _auth_error_redirect()
 
+    # `native` comes out of the SIGNED state, so it reflects how the login actually started.
+    native = False
     try:
-        expected_state, expected_nonce = auth_service.unsign_state(signed_state)
+        expected_state, expected_nonce, native = auth_service.unsign_state(signed_state)
         # Constant-time comparison guards against timing side-channels.
         if not secrets.compare_digest(expected_state, state):
             raise auth_service.AuthError("OAuth state mismatch — possible CSRF")
@@ -93,7 +108,7 @@ def google_callback(request: Request, code: str | None = None, state: str | None
         tokens = auth_service.exchange_code_for_tokens(code)
         claims = auth_service.verify_google_id_token(tokens.get("id_token", ""), expected_nonce)
     except auth_service.AuthError:
-        return _auth_error_redirect()
+        return _auth_error_redirect(native)
 
     # Is this the very first user? If so, they adopt the legacy "default" data.
     first_user = not repo.has_any_user()
@@ -111,8 +126,21 @@ def google_callback(request: Request, code: str | None = None, state: str | None
     # first user; this bootstraps everyone else).
     memory_service.ensure_files(user.id)
 
+    session_jwt = auth_service.mint_session_jwt(user.id)
+
+    if native:
+        # NATIVE app: the login ran in the system browser (Google forbids embedded WebViews),
+        # whose cookie jar the app's WebView cannot read. So hand the session JWT back through
+        # the app's custom-scheme deep link; the app stores it and sends it as a bearer token
+        # (see deps._session_token). No cookie is set — it would be unreachable anyway.
+        response = RedirectResponse(
+            f"{settings.native_app_redirect}?token={quote(session_jwt, safe='')}"
+        )
+        _clear_state_cookie(response)
+        return response
+
     response = RedirectResponse(settings.frontend_url)
-    _set_session_cookie(response, auth_service.mint_session_jwt(user.id))
+    _set_session_cookie(response, session_jwt)
     _clear_state_cookie(response)
     return response
 
