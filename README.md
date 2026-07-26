@@ -28,6 +28,8 @@ The thing that works — the thing that's always worked — is **talking to some
 
 You give the AI an identity at onboarding — a name, a relationship to you (best friend, mentor, mentor-crush, sibling), a personality, a way of speaking. You add the words and phrases you want to master. Then you just... **chat.**
 
+And you're not limited to one companion. Keep as many personas as you like — a best friend for banter, a mentor who pushes you, a calm voice at the end of a long day — and switch between them anytime. Each keeps its own chats and its own memory of the two of you, while your words and scores stay shared across all of them. Prefer not to design one from scratch? Pick a famous figure from **Discover** — a philosopher, a scientist, a writer — and the model embodies how they actually talked.
+
 Underneath that ordinary-feeling conversation, a hidden engine runs on every turn:
 
 - 🎯 **It picks your weakest words** to practice, using spaced repetition (lowest score first, then least recently used).
@@ -36,6 +38,7 @@ Underneath that ordinary-feeling conversation, a hidden engine runs on every tur
 - 🧠 **It remembers your life.** Fluently maintains a living memory of who you are, what's happening in your life, and the relationship you share — and edits that memory itself, with real tools, as it learns new things about you.
 - ⏰ **It knows what time it is.** Every conversation is grounded in the real date, weekday, and part of day, so it can reference *yesterday*, *this week*, or *the deadline you mentioned* correctly.
 - 🎙️ **You can just talk to it.** Tap the mic and have a real, out-loud conversation — full-duplex voice, in the persona's own voice, with your word usage scored live as you speak.
+- ✨ **Fluently itself can talk you through the app.** Separate from your companion, there's a built-in voice assistant — the app's own voice — that explains how anything works and does a few things for you hands-free, like creating a persona, adding a word, or switching your brain. Ask it a question out loud and it answers, then gets out of your way.
 
 To the user, it feels like texting (or talking to) a friend who happens to be a brilliant, patient English tutor. That gap — between how simple it feels and how much is happening underneath — **is the product.**
 
@@ -73,6 +76,12 @@ Two things make it special:
 - **Each persona has a voice.** Every companion is assigned one of ~30 Gemini Live voices (a hand-picked fit for the curated "Discover" figures, or your own choice in the persona editor). And if the persona is someone the model already knows — Newton, Austen, a fictional character — it's prompted to *embody their manner of speaking*, not just recite a description.
 
 Voice conversations are transcribed and **saved into the same chat thread** as text, so nothing is lost when you hang up — reopen the mic and it picks up with full history.
+
+### 🎭 Many companions, one you
+A user isn't stuck with a single AI. They can keep several **personas** and switch the active one whenever they like. What makes this more than a costume change: **identity and memory — the facts about the human — are shared across every persona, but each companion keeps its own relationship memory and its own separate chats.** So your mentor doesn't know the private jokes you share with your best friend, even though both know your name and your life. Deleting a persona takes its conversations with it but never touches your words or scores. And a curated **Discover** catalog lets you adopt a famous figure — real, historical, or fictional — as a companion in one tap, each shipping with a fitting voice; because the model already knows who they are, they argue and joke the way that person actually would.
+
+### 🗣️ A voice assistant for the app itself
+There are actually *two* voices in Fluently. One is your companion. The other is **Fluently speaking as itself** — a separate, app-wide voice assistant that helps you use the product. It explains any feature in plain words (including *how the memory works*, without the jargon), and it can act on your behalf hands-free: create a persona, add a practice word, or switch your AI brain, each confirmed out loud before it happens. It's deliberately kept on a tight leash — it helps with the app and nothing else, it never pretends to be your tutor, and unlike your companion chats, nothing it hears is saved or scored. When it does something for you, the affected screen updates live, no refresh.
 
 ### 🔑 Bring-your-own-key, with a choice of brains
 Every user supplies **their own Google Gemini API key** and picks a tier that governs *every* LLM call they make:
@@ -171,7 +180,7 @@ ENG/
 │       ├── App.jsx          Gating: health → auth → onboarding → model-config → app
 │       ├── api.js           fetch wrapper (credentials:'include'), one fn per endpoint
 │       ├── hooks/           TanStack Query hooks + useVoiceSession (mic/WS/playback)
-│       └── components/      Chat · VoiceOverlay · Words · Memory · Settings · Personas · Onboarding · Login · Shared
+│       └── components/      Chat · VoiceOverlay · AssistantOverlay/Fab · Words · Memory · Settings · Personas · Onboarding · Login · Shared
 │
 ├── backend/
 │   ├── app/
@@ -373,6 +382,7 @@ All endpoints except the auth handshake require the session cookie (`401` withou
 | **Memory** | `GET/POST/PUT` identity · memory · persona files, `PUT .../persona/form`, `POST /api/memory/onboarding` |
 | **Personas** | `GET/POST/PUT/DELETE /api/personas…`, `POST .../activate`, `GET /catalog`, `POST /catalog/{id}/use` |
 | **Voice** | `WS /api/voice/ws/{conversation_id}` (real-time audio), `GET /api/voice/voices`, `GET /api/voice/status` |
+| **Assistant** | `WS /api/assistant/ws?tab=…` (in-app voice helper), `GET /api/assistant/status` |
 | **Dashboard** | `GET /api/dashboard/stats` |
 | **Settings** | Data-management hard-delete endpoints |
 
