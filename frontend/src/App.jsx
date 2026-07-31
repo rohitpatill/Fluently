@@ -12,7 +12,7 @@ import Memory from './components/Memory';
 import SettingsView from './components/SettingsView';
 import AssistantOverlay from './components/AssistantOverlay';
 import AssistantFab from './components/AssistantFab';
-import { FullScreenError, FullScreenLoader } from './components/Shared';
+import { BootScreen, FullScreenError, FullScreenLoader } from './components/Shared';
 import {
   useAssistantStatus,
   useHealth,
@@ -31,6 +31,9 @@ export default function App() {
   const [view, setView] = useState('chat');
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantHint, setAssistantHint] = useState(false);
+  // How many times the user has tapped "Try again" on the error screen — after a couple of
+  // failures the error copy escalates instead of implying one more tap will fix it.
+  const [retryCount, setRetryCount] = useState(0);
   const queryClient = useQueryClient();
   const { open: keyboardOpen } = useKeyboardInset();
 
@@ -80,11 +83,23 @@ export default function App() {
   };
 
   if (health.isError) {
+    // Deliberately non-technical: the user can't act on a URL or an env-var name, and seeing one
+    // makes a working app look broken. The diagnostic detail goes to the console for us instead.
+    if (import.meta.env.DEV) {
+      console.error(
+        '[Fluently] health check failed against',
+        import.meta.env.VITE_API_URL || '(VITE_API_URL not set)',
+        health.error
+      );
+    }
     return (
       <FullScreenError
-        title="Can't reach your companion"
-        message={`The backend at ${import.meta.env.VITE_API_URL || '(VITE_API_URL not set)'} isn't responding. Check it's running and reachable, then try again.`}
+        title="We're having a moment"
+        message="Something on our end isn't responding right now. It's usually brief — give it a few seconds and try again."
+        attempts={retryCount}
+        retrying={health.isFetching}
         onRetry={() => {
+          setRetryCount((n) => n + 1);
           health.refetch();
           me.refetch();
         }}
@@ -92,7 +107,9 @@ export default function App() {
     );
   }
 
-  if (health.isLoading || me.isLoading) return <FullScreenLoader label="Waking things up…" />;
+  // The backend sleeps on a free host, so this first probe can run 20-30s. BootScreen narrates
+  // that honestly and plays the product's own story meanwhile — see Shared.jsx.
+  if (health.isLoading || me.isLoading) return <BootScreen />;
 
   // Not authenticated (no session / expired) → the login screen.
   if (!authed) return <Login />;
@@ -130,7 +147,9 @@ export default function App() {
     );
   }
 
-  if (persona.isLoading) return <FullScreenLoader label="Waking things up…" />;
+  // Post-auth and fast (one Mongo read) — a plain spinner is right here; the backend is
+  // already awake, so the boot screen's cold-start narration would be misleading.
+  if (persona.isLoading) return <FullScreenLoader label="Getting your companion…" />;
 
   const activePersona = (personas.data || []).find((p) => p.is_active);
   const personaId = activePersona?.id || null;

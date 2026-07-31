@@ -141,14 +141,14 @@ function Engine() {
             </p>
           </div>
 
-          {/* memory curating itself */}
+          {/* the companion quietly remembering, in its own voice */}
           <div
             className="self-start flex items-center gap-2 ml-5 px-[13px] py-2 border border-amber-border
                        rounded-full bg-amber-bg [transform:translateZ(88px)]"
           >
             <div className="w-[5px] h-[5px] rounded-full bg-amber-text-2" />
             <span className="text-[11.5px] tracking-[.01em] text-amber-text">
-              memory updated — the demo went well
+              noted — the demo went well
             </span>
           </div>
         </div>

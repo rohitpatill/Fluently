@@ -1,5 +1,6 @@
-import { motion } from 'motion/react';
-import { RefreshCw, Zap, Sparkles, Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { RefreshCw, Zap, Sparkles, Check, CloudOff } from 'lucide-react';
 import { initial } from '../utils';
 
 export function PersonaAvatar({ name, size = 'md', online = false, avatarUrl = '' }) {
@@ -55,32 +56,222 @@ export function Spinner({ className = '' }) {
 
 export function FullScreenLoader({ label = 'Loading…' }) {
   return (
-    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-bg">
+    <div className="min-h-dvh flex flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
       <Spinner />
       <p className="text-muted text-sm">{label}</p>
     </div>
   );
 }
 
-export function FullScreenError({ title, message, onRetry }) {
+// ── Boot screen ────────────────────────────────────────────────────────
+// Shown while the very first health/auth probe is in flight. The backend sleeps on a free
+// host, so this wait can genuinely run 20-30s. A bare spinner reads as "broken" after ~5s,
+// so instead we (a) tell the truth on a timer and (b) play out the product's own story —
+// the same bubble → reply → score → memory beats as the login page's 3D stack — so the
+// wait teaches the user what Fluently does rather than just burning their patience.
+
+/**
+ * Elapsed-time copy. It ACKNOWLEDGES the wait without ever explaining the cause: the user is
+ * here to learn English, and hosting/cold-start detail is both meaningless to them and not
+ * something they can act on. Silence past ~10s is what reads as "broken", so the escalation
+ * exists purely to keep saying "we know, we're still here".
+ */
+const BOOT_STAGES = [
+  { at: 0, label: 'Waking things up…' },
+  { at: 5, label: 'Just a moment — getting everything ready.' },
+  { at: 12, label: 'Almost there. Thanks for your patience.' },
+  { at: 22, label: 'Still working on it — hang tight.' },
+  { at: 40, label: 'This one’s taking a while. Still with you.' },
+  { at: 65, label: 'Nearly there — thanks for waiting it out.' },
+];
+
+/** The four beats of a real turn, revealed one at a time as the wait goes on. */
+const BOOT_BEATS = [
+  {
+    kind: 'them',
+    text: 'So — how did yesterday’s demo actually go? You were dreading it.',
+  },
+  { kind: 'me', text: 'Honestly? I was unflappable. Nobody could tell.' },
+  { kind: 'score', word: 'unflappable', score: 84, note: 'used unprompted, in the right place' },
+  { kind: 'memory', text: 'noted — the demo went well' },
+];
+
+export function BootScreen() {
+  // Tenths of a second, so the beat reveal can be paced sub-second without a fast interval.
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const started = Date.now();
+    const t = setInterval(() => setTick(Math.floor((Date.now() - started) / 100)), 200);
+    return () => clearInterval(t);
+  }, []);
+
+  const elapsed = tick / 10;
+  // Beats land at 0.5s, 1.7s, 2.9s, 4.1s — paced so a FAST boot shows only the first beat
+  // or two and the app never feels withheld, while a cold start fills the whole wait.
+  const shownCount = Math.max(0, Math.min(BOOT_BEATS.length, Math.floor((elapsed - 0.5) / 1.2) + 1));
+  const shown = BOOT_BEATS.slice(0, shownCount);
+  const stage = [...BOOT_STAGES].reverse().find((s) => elapsed >= s.at) || BOOT_STAGES[0];
+
   return (
-    <div className="h-screen flex items-center justify-center bg-bg">
+    <div className="relative min-h-dvh w-full overflow-x-hidden overflow-y-auto bg-bg flex items-center justify-center px-5 py-10">
+      {/* the login page's ambient accent wash, so boot → login → app is one continuous space */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(120% 90% at 78% 18%, var(--color-accent-soft) 0%, rgba(238,240,254,0) 62%), ' +
+            'radial-gradient(80% 70% at 8% 92%, var(--color-accent-soft) 0%, rgba(238,240,254,0) 58%), ' +
+            'linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-2) 100%)',
+        }}
+      />
+
+      <div className="relative w-full max-w-[420px] flex flex-col items-center">
+        <div className="flex items-center gap-2.5 mb-8">
+          <span className="w-2.5 h-2.5 rounded-full bg-accent shadow-accent animate-dot-pulse" />
+          <span className="text-[15px] font-bold tracking-tight text-text">Fluently</span>
+        </div>
+
+        {/* The story beats. Fixed min-height so the block doesn't jump as items appear. */}
+        <div
+          aria-hidden="true"
+          className="w-full flex flex-col gap-2.5 min-h-[232px] sm:min-h-[248px] justify-center"
+        >
+          <AnimatePresence>
+            {shown.map((b, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
+                className={
+                  b.kind === 'me'
+                    ? 'self-end max-w-[80%]'
+                    : b.kind === 'them'
+                      ? 'self-start max-w-[88%]'
+                      : b.kind === 'score'
+                        ? 'self-start w-[min(100%,290px)] ml-2'
+                        : 'self-start ml-3'
+                }
+              >
+                {b.kind === 'them' && (
+                  <div className="px-4 py-3 border border-border rounded-[20px_20px_20px_6px] bg-surface/92 shadow-card">
+                    <p className="m-0 font-serif-italic text-[15px] sm:text-[16px] leading-[1.5] text-text-2">
+                      {b.text}
+                    </p>
+                  </div>
+                )}
+                {b.kind === 'me' && (
+                  <div
+                    className="px-4 py-2.5 rounded-[20px_20px_6px_20px] shadow-accent"
+                    style={{
+                      background:
+                        'linear-gradient(180deg, var(--color-accent) 0%, #4353DC 100%)',
+                    }}
+                  >
+                    <p className="m-0 text-[14px] sm:text-[15px] leading-[1.5] text-[#F2F3FE]">
+                      {b.text}
+                    </p>
+                  </div>
+                )}
+                {b.kind === 'score' && (
+                  <div className="px-4 py-3.5 border border-border-2 rounded-[18px] bg-surface shadow-soft">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[14px] font-bold tracking-tight text-text truncate">
+                        {b.word}
+                      </span>
+                      <span className="font-mono text-[11px] text-green shrink-0">
+                        {b.score} / 100
+                      </span>
+                    </div>
+                    <div className="mt-2.5 h-[5px] rounded-full bg-border overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${b.score}%` }}
+                        transition={{ duration: 0.9, ease: [0.2, 0.8, 0.2, 1], delay: 0.15 }}
+                        className="h-full rounded-full"
+                        style={{
+                          background:
+                            'linear-gradient(90deg, var(--color-accent) 0%, var(--color-green) 100%)',
+                        }}
+                      />
+                    </div>
+                    <p className="mt-2.5 mb-0 text-[11.5px] leading-[1.5] text-muted">{b.note}</p>
+                  </div>
+                )}
+                {b.kind === 'memory' && (
+                  <div className="inline-flex items-center gap-2 px-3 py-2 border border-amber-border rounded-full bg-amber-bg">
+                    <span className="w-[5px] h-[5px] rounded-full bg-amber-text-2 shrink-0" />
+                    <span className="text-[11px] tracking-[.01em] text-amber-text">{b.text}</span>
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {/* Status line — the honest, escalating part. aria-live so it's announced, not silent. */}
+        <div className="mt-8 flex items-center gap-2.5 min-h-[24px]" role="status" aria-live="polite">
+          <span className="w-4 h-4 rounded-full border-2 border-border-2 border-t-accent animate-spin shrink-0" />
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={stage.at}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.22 }}
+              className="m-0 text-[13px] text-muted text-center text-pretty"
+            >
+              {stage.label}
+            </motion.p>
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Full-screen error ──────────────────────────────────────────────────
+// Deliberately says nothing technical. The old copy printed VITE_API_URL at the user, which
+// is meaningless to them and reads as a broken build. `attempts` escalates the guidance once
+// retrying clearly isn't working, so we stop implying one more tap will fix it.
+export function FullScreenError({ title, message, onRetry, attempts = 0, retrying = false }) {
+  const persistent = attempts >= 2;
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-bg px-5 py-10 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center max-w-[420px] px-6"
+        className="text-center w-full max-w-[440px]"
       >
-        <div className="w-14 h-14 rounded-2xl bg-red/10 text-red flex items-center justify-center mx-auto mb-5 text-2xl">
-          !
+        <div className="w-14 h-14 rounded-2xl bg-amber-bg border border-amber-border text-amber-text flex items-center justify-center mx-auto mb-5">
+          <CloudOff size={22} />
         </div>
-        <h2 className="text-xl font-bold m-0 mb-2">{title}</h2>
-        <p className="text-muted text-sm m-0 mb-6 leading-relaxed">{message}</p>
+        <h2 className="text-xl sm:text-[22px] font-bold m-0 mb-2.5 text-text text-balance">
+          {title}
+        </h2>
+        <p className="text-text-3 text-[14.5px] m-0 leading-relaxed text-pretty">{message}</p>
+
+        {persistent && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-3 mb-0 text-[13px] text-muted leading-relaxed text-pretty"
+          >
+            Still not working? It may be a longer outage on our side — please try again in a
+            little while. Nothing you’ve saved is affected.
+          </motion.p>
+        )}
+
         {onRetry && (
           <button
             onClick={onRetry}
-            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-white rounded-2xl px-6 py-3 text-sm font-semibold shadow-accent cursor-pointer transition-colors"
+            disabled={retrying}
+            className="mt-6 inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover disabled:opacity-70 disabled:cursor-wait text-white rounded-2xl px-6 py-3 text-sm font-semibold shadow-accent cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
           >
-            <RefreshCw size={15} /> Try again
+            <RefreshCw size={15} className={retrying ? 'animate-spin' : ''} />
+            {retrying ? 'Trying…' : 'Try again'}
           </button>
         )}
       </motion.div>

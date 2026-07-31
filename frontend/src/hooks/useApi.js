@@ -1,11 +1,25 @@
 import { useQuery } from '@tanstack/react-query';
 import * as api from '../api';
 
+// The backend is on a free host that SLEEPS when idle, so the very first request of a session
+// can take 20-30s (cold start) or fail once before the container is up. With `retry: 0` a single
+// failed probe flipped the whole app to the error screen — a working app looked dead. So we retry
+// with a capped backoff (~26s of attempts) and only surface an error once that budget is spent.
+// `<BootScreen>` covers the wait and narrates it, so the retries are never a blank screen.
+// A cold start can genuinely take a MINUTE (container boot + Mongo connect), so the budget has
+// to cover the worst case, not the average — erroring at 26s showed "we're having a moment" for
+// a backend that was simply still booting. 12 attempts with a 2s..10s backoff ≈ 105s of waiting.
+// The cost of being generous is only a longer BootScreen (which narrates the wait); the cost of
+// being stingy is a working app that looks dead. So we err long.
+const HEALTH_MAX_RETRIES = 12;
+
 export function useHealth() {
   return useQuery({
     queryKey: ['health'],
     queryFn: api.getHealth,
-    retry: 0,
+    retry: HEALTH_MAX_RETRIES,
+    // 2s,4s,8s,10s,10s… — capped at 10s so late attempts stay responsive once it wakes.
+    retryDelay: (attempt) => Math.min(2000 * 2 ** attempt, 10000),
     staleTime: 0,
     refetchInterval: 15000,
   });

@@ -29,7 +29,10 @@ async function request(path, options = {}) {
       ...options,
     });
   } catch (err) {
-    throw new ApiError('Could not reach the server. Is the backend running?', 0);
+    // User-facing (this lands in toasts) — so no "backend"/"server" talk. The real cause goes
+    // to the console for us instead; a learner can't act on it and it makes the app look broken.
+    if (import.meta.env.DEV) console.error('[Fluently] request failed:', path, err);
+    throw new ApiError("Couldn't connect. Check your internet and try again.", 0);
   }
   if (!res.ok) {
     let detail = res.statusText;
