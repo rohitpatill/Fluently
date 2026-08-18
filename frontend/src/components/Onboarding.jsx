@@ -56,7 +56,7 @@ export default function Onboarding({ onComplete }) {
   const structuring = saving && step === 3;
 
   return (
-    <div className="min-h-dvh bg-linear-to-b from-bg to-accent-soft flex items-center justify-center animate-fade-in overflow-y-auto px-4 py-6">
+    <div className="h-dvh bg-linear-to-b from-bg to-accent-soft flex flex-col items-center animate-fade-in overflow-y-auto px-4 py-6">
       <AnimatePresence>
         {structuring && (
           <motion.div
