@@ -8,7 +8,7 @@
 
 <br/>
 
-`React 19` · `FastAPI` · `LangChain 1.x` · `MongoDB Atlas` · `Google Gemini` · `Google OAuth`
+`React 19` · `FastAPI` · `LangChain 1.x` · `MongoDB Atlas` · `Google Gemini` · `Google OAuth` . `Capacitor`
 
 </div>
 
