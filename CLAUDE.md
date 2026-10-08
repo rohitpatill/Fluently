@@ -160,7 +160,7 @@ naturally into conversations, judges how well the user produces them, and tracks
    the original decisions.
 10. **Bring-your-own-key + model tiers (BUILT)** — every user brings their OWN Google Gemini
     API key and picks a **tier** that governs EVERY LLM call for them (chat + judge + utility):
-    **Swift** = `gemini-3.1-flash-lite` (cheap, everyday) | **Sage** = `gemini-3.5-flash`
+    **Swift** = `gemini-3.5-flash-lite` (cheap, everyday) | **Sage** = `gemini-3.8-flash`
     (sharper, pricier). The tier catalogue (names/model ids/taglines/prices) is the single source
     of truth in `config.MODEL_TIERS`. The key is stored **encrypted at rest** (Fernet, via
     `crypto_service.py`; master `ENCRYPTION_KEY` lives ONLY in `.env` — a DB leak yields useless
@@ -173,7 +173,7 @@ naturally into conversations, judges how well the user produces them, and tracks
 11. **Voice mode (real-time audio, BUILT)** — the user can TALK to the active persona (mic button
     left of Send in the chat composer → a full-screen blurred overlay with the pulsing persona
     avatar + live transcript + word-score pops). A backend **WebSocket** (`routers/voice.py`) proxies
-    duplex audio browser↔**Gemini Live** (`config.voice_model` = `gemini-3.1-flash-live-preview`;
+    duplex audio browser↔**Gemini Live** (`config.voice_model` = `gemini-3.8-live`;
     mic 16kHz PCM in, 24kHz PCM out), paid by the user's OWN BYO key. It reuses text mode wholesale:
     the SAME dynamic system prompt (persona/identity/memory/full word list/time) + the SAME tools
     (`memory_update`/`search_conversations`, adapted for the Live protocol by `services/voice_tools.py`)
@@ -423,7 +423,7 @@ per-user model) → 7. judge user message (same per-user model) → scoring even
 - Sync PyMongo + sync routes (FastAPI threadpools them). Streaming/SSE is a planned
   upgrade (pattern documented in research: astream + StreamingResponse).
 - No summarization/compaction of history yet; no vector search yet (BM25 only) — both planned.
-- Model per user = their chosen tier (Swift `gemini-3.1-flash-lite` / Sage `gemini-3.5-flash`,
+- Model per user = their chosen tier (Swift `gemini-3.5-flash-lite` / Sage `gemini-3.8-flash`,
   from `config.MODEL_TIERS`); governs chat + judge + utility. Not `.env`-driven anymore.
   Voice mode uses a SEPARATE fixed live model (`config.voice_model`, not the tier) but the
   user's OWN key still pays for it.

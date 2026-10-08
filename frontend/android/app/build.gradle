@@ -24,8 +24,8 @@ android {
         // versionCode MUST strictly increase on every Play Store upload (Play rejects a reused
         // value, even across different tracks). versionName is the human-facing string and can
         // stay the same across builds.
-        versionCode 2
-        versionName "1.0"
+        versionCode 4
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

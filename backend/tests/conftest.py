@@ -161,7 +161,7 @@ def mock_llms(request, monkeypatch):
     # Each service resolves the user's per-user model before calling the (mocked) factory.
     # Stub the resolver so tests don't need a decryptable key / real provider.
     fake_resolved = model_service.ResolvedModel(
-        provider="google_genai", model="gemini-3.1-flash-lite", api_key="test", tier="swift"
+        provider="google_genai", model="gemini-3.5-flash-lite", api_key="test", tier="swift"
     )
     for svc in (chat_service, judge_service, topic_service):
         monkeypatch.setattr(svc, "resolve_for_user", lambda *a, **k: fake_resolved)

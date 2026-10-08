@@ -86,8 +86,8 @@ There are actually *two* voices in Fluently. One is your companion. The other is
 ### 🔑 Bring-your-own-key, with a choice of brains
 Every user supplies **their own Google Gemini API key** and picks a tier that governs *every* LLM call they make:
 
-- **Swift** (`gemini-3.1-flash-lite`) — quick, natural, light on quota.
-- **Sage** (`gemini-3.5-flash`) — sharper, more thoughtful, uses quota faster.
+- **Swift** (`gemini-3.5-flash-lite`) — quick, natural, light on quota.
+- **Sage** (`gemini-3.8-flash`) — sharper, more thoughtful, uses quota faster.
 
 The key is **encrypted at rest** (Fernet symmetric encryption; the master key lives only in the server's environment, never in the database — a database leak yields useless ciphertext). No shared server-side key, no per-user cost to the operator, and the tier catalogue is a single source of truth: adding a third brain is a one-row config change.
 

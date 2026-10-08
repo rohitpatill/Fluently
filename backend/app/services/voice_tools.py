@@ -91,7 +91,7 @@ def _score_word_declaration() -> types.FunctionDeclaration:
     """The voice-only live scoring tool. The model MUST call it the moment it hears the user
     produce (or misuse) one of the target words, so the UI can pop the score animation live.
 
-    This is a PLAIN (blocking) tool on purpose: `gemini-3.1-flash-live-preview` is blocking-only
+    This is a PLAIN (blocking) tool on purpose: `gemini-3.8-live` is blocking-only
     for function calls, and blocking tool-calling is the reliable, proven path (matches the
     reference architecture). The call is a tiny DB write, so the pause is imperceptible."""
     return types.FunctionDeclaration(

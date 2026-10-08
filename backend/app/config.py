@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     # The live audio-to-audio model used for voice conversations. Kept configurable so we can
     # swap it (e.g. to a native-audio model that supports non-blocking tools) without a code
     # change. Voice mode uses the SAME per-user BYO key as text mode (resolved per request).
-    voice_model: str = "gemini-3.1-flash-live-preview"
+    voice_model: str = "gemini-3.8-live"
 
     # User's timezone — all temporal reasoning in the prompt is computed in this zone.
     user_timezone: str = "Asia/Kolkata"
@@ -130,17 +130,17 @@ MODEL_TIERS: dict[str, dict] = {
         "key": "swift",
         "name": "Swift",
         "provider": "google_genai",
-        "model": "gemini-3.1-flash-lite",
+        "model": "gemini-3.5-flash-lite",
         "tagline": "Quick, natural conversation. Light on your quota.",
-        "price": "Input $0.25 / Output $1.50 per 1M tokens",
+        "price": "Input $0.30 / Output $2.50 per 1M tokens",
     },
     "sage": {
         "key": "sage",
         "name": "Sage",
         "provider": "google_genai",
-        "model": "gemini-3.5-flash",
+        "model": "gemini-3.8-flash",
         "tagline": "Sharper, more thoughtful replies — but uses your quota noticeably faster.",
-        "price": "Input $1.50 / Output $9.00 per 1M tokens",
+        "price": "Input $0.75 / Output $3.75 per 1M tokens",
     },
 }
 
@@ -161,7 +161,7 @@ def tier_config(tier: str) -> dict | None:
 #   gender -> "male" | "female" — community-inferred (Google publishes tone, NOT gender);
 #             used ONLY to pick a sensible DEFAULT voice from a persona's Gender field.
 # Users can audition every voice live in Google AI Studio (link surfaced in the UI):
-#   https://aistudio.google.com/live?model=gemini-3.1-flash-live-preview
+#   https://aistudio.google.com/live?model=gemini-3.8-live
 # Adding/removing a voice = edit this list only (backend list endpoint + UI both read it).
 VOICES: list[dict] = [
     {"id": "Puck", "label": "Puck", "tone": "Upbeat, Middle pitch", "gender": "male"},

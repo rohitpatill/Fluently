@@ -35,7 +35,7 @@ def test_tiers_lists_swift_and_sage(client):
     keys = {t["key"] for t in tiers}
     assert keys == {"swift", "sage"}
     swift = next(t for t in tiers if t["key"] == "swift")
-    assert swift["model"] == "gemini-3.1-flash-lite"
+    assert swift["model"] == "gemini-3.5-flash-lite"
     assert "price" in swift and "tagline" in swift
 
 
